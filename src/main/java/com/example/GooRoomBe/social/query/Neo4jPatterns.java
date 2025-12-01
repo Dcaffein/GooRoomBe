@@ -10,6 +10,7 @@ public final class Neo4jPatterns {
     public static final Relationship MY_REL = ME.relationshipTo(FRIEND_SHIP_NODE, MEMBER_OF).named("myRel");
     public static final Relationship ONE_HOP_REL = ONE_HOP_FRIEND.relationshipTo(FRIEND_SHIP_NODE, MEMBER_OF).named("oneHopRel");
     public static final AliasedExpression ALIAS = MY_REL.property("friendAlias").as("friendAlias");
+    public static final AliasedExpression WEIGHT = MY_REL.property("weight").as("weight");
 
     /**
      * 1-HOP 친구 찾기

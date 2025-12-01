@@ -34,23 +34,25 @@ public class SocialQueryService {
 
         //  1-hop 패턴 호출
         StatementBuilder.OngoingReadingAndWith firstWith = findOneHopFriends(literalOf(userId))
-                .with(ME, ONE_HOP_FRIEND, ALIAS);
+                .with(ME, ONE_HOP_FRIEND, ALIAS, WEIGHT);
 
         // 2-hop(MUTUAL_FRIEND) 패턴 호출
         StatementBuilder.OngoingReadingAndWith secondWith = findTwoHopPatternOptional(firstWith, MUTUAL_FRIEND)
                 .and(isFriends(ME, MUTUAL_FRIEND)) // 함께 아는 친구 조건
-                .with(ME, ONE_HOP_FRIEND, ALIAS, MUTUAL_FRIEND);
+                .with(ME, ONE_HOP_FRIEND, ALIAS, WEIGHT, MUTUAL_FRIEND);
 
         Statement statement = secondWith
                 .with(
                         ONE_HOP_FRIEND,
                         ALIAS,
+                        WEIGHT,
                         collectDistinct(MUTUAL_FRIEND.property("id")).as("mutualFriendIds")
                 )
                 .returning(
                         ONE_HOP_FRIEND.property("id").as("friendId"),
                         ONE_HOP_FRIEND.property("nickname").as("friendName"),
                         ALIAS,
+                        WEIGHT,
                         name("mutualFriendIds")
                 )
                 .build();
