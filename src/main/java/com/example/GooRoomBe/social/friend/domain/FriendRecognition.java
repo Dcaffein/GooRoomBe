@@ -25,6 +25,8 @@ public class FriendRecognition {
 
     private String friendAlias;
 
+    private Double weight;
+
     public FriendRecognition(SocialUser user) {
         this.user = user;
         this.friendAlias = null;

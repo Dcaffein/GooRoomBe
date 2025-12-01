@@ -19,13 +19,12 @@ public interface FriendshipRepository extends Neo4jRepository<Friendship, String
             ")")
     boolean existsFriendshipBetween(@Param("requesterId") String requesterId, @Param("receiverId") String receiverId);
 
-
     @Query("MATCH " +
-            "(owner:" + SOCIAL_USER + " {id: $ownerId})-[:" + MEMBER_OF + "]->" +
+            "(owner:" + SOCIAL_USER + " {id: $ownerId})-[r1:" + MEMBER_OF + "]->" +
             "(fs:" + FRIENDSHIP + ")" +
-            "<-[:" + MEMBER_OF + "]-(friend:" + SOCIAL_USER + ") " +
+            "<-[r2:" + MEMBER_OF + "]-(friend:" + SOCIAL_USER + ") " +
             "WHERE friend.id IN $potentialMemberIds " +
-            "RETURN fs")
+            "RETURN fs, collect(r1), collect(r2), collect(owner), collect(friend)")
     Set<Friendship> filterFriendsFromIdList(@Param("ownerId") String ownerId, @Param("potentialMemberIds") List<String> potentialMemberIds);
 
     @Query("MATCH (u1:" +SOCIAL_USER+ " {id: $myId})-[r1:" +MEMBER_OF+ "]->" +

@@ -55,18 +55,19 @@ public class Friendship {
                 .orElseThrow(() -> new FriendshipNotFoundException(this.id, userId));
     }
 
-    private FriendRecognition getFriendRecognition(String userId) {
+    private FriendRecognition getFriendRecognition(String myId) {
+        //이 친구관계 참여자인지 확인
         boolean isMember = this.recognitions.stream()
-                .anyMatch(friendRecognition -> friendRecognition.getUser().getId().equals(userId));
-
+                .anyMatch(friendRecognition -> friendRecognition.getUser().getId().equals(myId));
         if (!isMember) {
-            throw new FriendshipNotFoundException(this.id, userId);
+            throw new FriendshipNotFoundException(this,myId);
         }
 
+        //
         return this.recognitions.stream()
-                .filter(friendRecognition -> !friendRecognition.getUser().getId().equals(userId))
+                .filter(friendRecognition -> !friendRecognition.getUser().getId().equals(myId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Friendship data corrupted: No friend found"));
+                .orElseThrow(() -> new FriendshipNotFoundException(this,myId));
     }
 
     private static String generateCompositeId(String id1, String id2) {
@@ -81,28 +82,29 @@ public class Friendship {
                 .collect(Collectors.toSet());
     }
 
-    public String getFriendAlias(String userId) {
-        return getSelfRecognition(userId).getFriendAlias();
+    public String getFriendAlias(String myId) {
+        return getSelfRecognition(myId).getFriendAlias();
     }
 
-    public void updateFriendAlias(String userId, String alias) {
-        getSelfRecognition(userId).updateFriendAlias(alias);
+    public void updateFriendAlias(String myId, String alias) {
+        getSelfRecognition(myId).updateFriendAlias(alias);
     }
 
-    public void updateOnIntroduce(String userId, boolean onIntroduce) {
-        getSelfRecognition(userId).updateOnIntroduce(onIntroduce);
+    public void updateOnIntroduce(String myId, boolean onIntroduce) {
+        getSelfRecognition(myId).updateOnIntroduce(onIntroduce);
     }
 
-    public SocialUser getFriend(String userId) {
-        return getFriendRecognition(userId).getUser();
+    //me
+    public SocialUser getFriend(String myId) {
+        return getFriendRecognition(myId).getUser();
     }
 
-    public void checkDeletable(String userId) {
+    public void checkDeletable(String myId) {
         boolean isParticipant = this.recognitions.stream()
-                .anyMatch(r -> r.getUser().getId().equals(userId));
+                .anyMatch(r -> r.getUser().getId().equals(myId));
 
         if (!isParticipant) {
-            throw new FriendshipAuthorizationException(userId);
+            throw new FriendshipAuthorizationException(myId);
         }
     }
 }
