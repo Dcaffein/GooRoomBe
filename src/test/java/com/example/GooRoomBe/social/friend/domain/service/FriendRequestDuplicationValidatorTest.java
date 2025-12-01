@@ -1,9 +1,9 @@
 package com.example.GooRoomBe.social.friend.domain.service;
 
+import com.example.GooRoomBe.social.friend.infrastructure.FriendshipPort;
 import com.example.GooRoomBe.social.friend.exception.AlreadyFriendException;
 import com.example.GooRoomBe.social.friend.exception.DuplicateFriendRequestException;
 import com.example.GooRoomBe.social.friend.infrastructure.FriendRequestRepository;
-import com.example.GooRoomBe.social.friend.infrastructure.FriendshipRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,7 +21,7 @@ class FriendRequestDuplicationValidatorTest {
     @Mock
     private FriendRequestRepository friendRequestRepository;
     @Mock
-    private FriendshipRepository friendshipRepository;
+    private FriendshipPort friendshipPort;
 
     @InjectMocks
     private FriendRequestDuplicationValidator validator;
@@ -34,7 +34,7 @@ class FriendRequestDuplicationValidatorTest {
     void validateNewRequest_Success() {
         // given
         given(friendRequestRepository.existsRequestBetween(requesterId, receiverId)).willReturn(false);
-        given(friendshipRepository.existsFriendshipBetween(requesterId, receiverId)).willReturn(false);
+        given(friendshipPort.existsFriendshipBetween(requesterId, receiverId)).willReturn(false);
 
         // when & then
         assertDoesNotThrow(() -> validator.validateNewRequest(requesterId, receiverId));
@@ -56,7 +56,7 @@ class FriendRequestDuplicationValidatorTest {
     void validateNewRequest_Fail_AlreadyFriend() {
         // given
         given(friendRequestRepository.existsRequestBetween(requesterId, receiverId)).willReturn(false);
-        given(friendshipRepository.existsFriendshipBetween(requesterId, receiverId)).willReturn(true);
+        given(friendshipPort.existsFriendshipBetween(requesterId, receiverId)).willReturn(true);
 
         // when & then
         assertThatThrownBy(() -> validator.validateNewRequest(requesterId, receiverId))

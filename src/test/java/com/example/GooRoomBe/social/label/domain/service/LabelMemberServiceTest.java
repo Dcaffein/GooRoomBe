@@ -1,8 +1,8 @@
 package com.example.GooRoomBe.social.label.domain.service;
 
+import com.example.GooRoomBe.social.friend.infrastructure.FriendshipPort;
 import com.example.GooRoomBe.social.friend.domain.Friendship;
 import com.example.GooRoomBe.social.friend.exception.FriendshipNotFoundException;
-import com.example.GooRoomBe.social.friend.infrastructure.FriendshipRepository;
 import com.example.GooRoomBe.social.label.domain.Label;
 import com.example.GooRoomBe.social.label.exception.InvalidLabelMemberException;
 import com.example.GooRoomBe.social.socialUser.SocialUser;
@@ -26,7 +26,7 @@ import static org.mockito.Mockito.*;
 class LabelMemberServiceTest {
 
     @Mock
-    private FriendshipRepository friendshipRepository;
+    private FriendshipPort friendshipPort;
 
     @InjectMocks
     private LabelMemberService labelMemberService;
@@ -49,7 +49,7 @@ class LabelMemberServiceTest {
         given(newMember.getId()).willReturn("friendId");
 
         // 친구 관계 존재함
-        given(friendshipRepository.existsFriendshipBetween("ownerId", "friendId")).willReturn(true);
+        given(friendshipPort.existsFriendshipBetween("ownerId", "friendId")).willReturn(true);
 
         // when
         labelMemberService.addNewMember(label, newMember);
@@ -67,7 +67,7 @@ class LabelMemberServiceTest {
         given(newMember.getId()).willReturn("strangerId");
 
         // 친구 관계 없음
-        given(friendshipRepository.existsFriendshipBetween("ownerId", "strangerId")).willReturn(false);
+        given(friendshipPort.existsFriendshipBetween("ownerId", "strangerId")).willReturn(false);
 
         // when & then
         assertThatThrownBy(() -> labelMemberService.addNewMember(label, newMember))
@@ -95,7 +95,7 @@ class LabelMemberServiceTest {
         given(fs2.getFriend(ownerId)).willReturn(u2);
 
         // DB에서 조회된 친구 관계들
-        given(friendshipRepository.filterFriendsFromIdList(eq(ownerId), eq(requestIds)))
+        given(friendshipPort.filterFriendsFromIdList(eq(ownerId), eq(requestIds)))
                 .willReturn(Set.of(fs1, fs2));
 
         // when
@@ -122,7 +122,7 @@ class LabelMemberServiceTest {
         given(u1.getId()).willReturn("realFriend"); // 조회된 유저는 realFriend 뿐
         given(fs1.getFriend(ownerId)).willReturn(u1);
 
-        given(friendshipRepository.filterFriendsFromIdList(eq(ownerId), eq(requestIds)))
+        given(friendshipPort.filterFriendsFromIdList(eq(ownerId), eq(requestIds)))
                 .willReturn(Set.of(fs1)); // 하나만 리턴됨
 
         // when & then
@@ -145,6 +145,6 @@ class LabelMemberServiceTest {
 
         // then
         verify(label).replaceMembers(Set.of()); // 빈 셋으로 교체
-        verify(friendshipRepository, never()).filterFriendsFromIdList(any(), any());
+        verify(friendshipPort, never()).filterFriendsFromIdList(any(), any());
     }
 }

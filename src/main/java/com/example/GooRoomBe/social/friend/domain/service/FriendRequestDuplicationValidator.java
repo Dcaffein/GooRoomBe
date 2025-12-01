@@ -1,8 +1,8 @@
 package com.example.GooRoomBe.social.friend.domain.service;
 
+import com.example.GooRoomBe.social.friend.infrastructure.FriendshipPort;
 import com.example.GooRoomBe.social.friend.exception.AlreadyFriendException;
 import com.example.GooRoomBe.social.friend.exception.DuplicateFriendRequestException;
-import com.example.GooRoomBe.social.friend.infrastructure.FriendshipRepository;
 import com.example.GooRoomBe.social.friend.infrastructure.FriendRequestRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class FriendRequestDuplicationValidator {
     private final FriendRequestRepository friendRequestRepository;
-    private final FriendshipRepository friendShipRepository;
+    private final FriendshipPort friendshipPort;
 
     public void validateNewRequest(String requesterId, String receiverId) {
         checkRequestDuplication(requesterId, receiverId);
@@ -19,7 +19,7 @@ public class FriendRequestDuplicationValidator {
     }
 
     private void checkFriendShipDuplication(String requesterId, String receiverId) {
-        if (friendShipRepository.existsFriendshipBetween(requesterId, receiverId)) {
+        if (friendshipPort.existsFriendshipBetween(requesterId, receiverId)) {
             throw new AlreadyFriendException(requesterId,receiverId);
         }
     }

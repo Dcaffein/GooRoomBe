@@ -1,10 +1,10 @@
 package com.example.GooRoomBe.social.friend.domain.factory;
 
+import com.example.GooRoomBe.social.friend.infrastructure.FriendshipPort;
 import com.example.GooRoomBe.social.friend.domain.FriendRequest;
 import com.example.GooRoomBe.social.friend.domain.Friendship;
 import com.example.GooRoomBe.social.friend.exception.AlreadyFriendException;
 import com.example.GooRoomBe.social.friend.exception.FriendRequestNotAcceptedException;
-import com.example.GooRoomBe.social.friend.infrastructure.FriendshipRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -12,14 +12,14 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class FriendshipFactory {
 
-    private final FriendshipRepository friendshipRepository;
+    private final FriendshipPort friendshipPort;
 
     public Friendship createFromRequest(FriendRequest friendRequest) {
         if (!friendRequest.isAccepted()) {
             throw new FriendRequestNotAcceptedException(friendRequest.getId());
         }
 
-        if (friendshipRepository.existsFriendshipBetween(
+        if (friendshipPort.existsFriendshipBetween(
                 friendRequest.getRequester().getId(),
                 friendRequest.getReceiver().getId())) {
             throw new AlreadyFriendException(friendRequest.getRequester().getId(), friendRequest.getReceiver().getId());

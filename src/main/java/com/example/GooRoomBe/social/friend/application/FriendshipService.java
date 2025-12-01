@@ -3,6 +3,7 @@ package com.example.GooRoomBe.social.friend.application;
 import com.example.GooRoomBe.social.friend.api.dto.FriendUpdateRequestDto;
 import com.example.GooRoomBe.social.friend.domain.event.FriendShipDeletedEvent;
 import com.example.GooRoomBe.social.friend.domain.Friendship;
+import com.example.GooRoomBe.social.friend.infrastructure.FriendshipPort;
 import com.example.GooRoomBe.social.socialUser.SocialUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;

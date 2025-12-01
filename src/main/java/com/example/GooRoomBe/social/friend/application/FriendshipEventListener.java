@@ -5,8 +5,8 @@ import com.example.GooRoomBe.social.friend.domain.Friendship;
 import com.example.GooRoomBe.social.friend.domain.event.FriendRequestAcceptedEvent;
 import com.example.GooRoomBe.social.friend.domain.factory.FriendshipFactory;
 import com.example.GooRoomBe.social.friend.infrastructure.FriendRequestRepository;
-import com.example.GooRoomBe.social.friend.infrastructure.FriendshipRepository;
 import com.example.GooRoomBe.social.friend.exception.FriendRequestNotFoundException;
+import com.example.GooRoomBe.social.friend.infrastructure.FriendshipPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FriendshipEventListener {
 
     private final FriendshipFactory friendshipFactory;
-    private final FriendshipRepository friendshipRepository;
+    private final FriendshipPort friendshipPort;
     private final FriendRequestRepository friendRequestRepository;
 
     @EventListener
@@ -28,6 +28,6 @@ public class FriendshipEventListener {
 
         Friendship friendship = friendshipFactory.createFromRequest(friendRequest);
 
-        friendshipRepository.save(friendship);
+        friendshipPort.save(friendship);
     }
 }

@@ -1,10 +1,10 @@
 package com.example.GooRoomBe.social.friend.domain.factory;
 
+import com.example.GooRoomBe.social.friend.infrastructure.FriendshipPort;
 import com.example.GooRoomBe.social.friend.domain.FriendRequest;
 import com.example.GooRoomBe.social.friend.domain.Friendship;
 import com.example.GooRoomBe.social.friend.exception.AlreadyFriendException;
 import com.example.GooRoomBe.social.friend.exception.FriendRequestNotAcceptedException;
-import com.example.GooRoomBe.social.friend.infrastructure.FriendshipRepository;
 import com.example.GooRoomBe.social.socialUser.SocialUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,7 +22,7 @@ import static org.mockito.Mockito.mock;
 class FriendshipFactoryTest {
 
     @Mock
-    private FriendshipRepository friendshipRepository;
+    private FriendshipPort friendshipPort;
 
     @InjectMocks
     private FriendshipFactory friendshipFactory;
@@ -44,7 +44,7 @@ class FriendshipFactoryTest {
         given(requester.getId()).willReturn("userA");
         given(receiver.getId()).willReturn("userB");
 
-        given(friendshipRepository.existsFriendshipBetween("userA", "userB")).willReturn(false);
+        given(friendshipPort.existsFriendshipBetween("userA", "userB")).willReturn(false);
 
         // when
         Friendship friendship = friendshipFactory.createFromRequest(request);
@@ -81,7 +81,7 @@ class FriendshipFactoryTest {
         given(receiver.getId()).willReturn("userB");
 
         // 이미 친구임
-        given(friendshipRepository.existsFriendshipBetween("userA", "userB")).willReturn(true);
+        given(friendshipPort.existsFriendshipBetween("userA", "userB")).willReturn(true);
 
         // when & then
         assertThatThrownBy(() -> friendshipFactory.createFromRequest(request))

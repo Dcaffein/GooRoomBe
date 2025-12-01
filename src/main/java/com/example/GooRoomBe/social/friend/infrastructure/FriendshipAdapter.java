@@ -1,10 +1,13 @@
 package com.example.GooRoomBe.social.friend.infrastructure;
 
-import com.example.GooRoomBe.social.friend.application.FriendshipPort;
 import com.example.GooRoomBe.social.friend.domain.Friendship;
 import com.example.GooRoomBe.social.friend.exception.FriendshipNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -26,5 +29,15 @@ public class FriendshipAdapter implements FriendshipPort {
     @Override
     public void delete(Friendship friendship) {
         friendshipRepository.delete(friendship);
+    }
+
+    @Override
+    public boolean existsFriendshipBetween(String requesterId, String receiverId) {
+        return friendshipRepository.existsFriendshipBetween(requesterId, receiverId);
+    }
+
+    @Override
+    public Set<Friendship> filterFriendsFromIdList(String ownerId, List<String> potentialMemberIds) {
+        return friendshipRepository.filterFriendsFromIdList(ownerId, potentialMemberIds);
     }
 }
