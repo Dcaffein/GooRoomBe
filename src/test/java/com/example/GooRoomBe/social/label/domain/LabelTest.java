@@ -32,11 +32,7 @@ class LabelTest {
 
     @BeforeEach
     void setUp() {
-        // Owner ID 설정 (권한 체크 테스트용)
-        // lenient()는 테스트 케이스에 따라 이 스터빙이 안 쓰일 수도 있어서 추가함
         org.mockito.Mockito.lenient().when(owner.getId()).thenReturn(OWNER_ID);
-
-        // 초기 Label 생성
         label = new Label(owner, "My Label", true);
     }
 

@@ -1,6 +1,7 @@
 package com.example.GooRoomBe.social.label.application;
 
 import com.example.GooRoomBe.social.label.api.dto.LabelUpdateRequestDto;
+import com.example.GooRoomBe.social.label.exception.LabelNotFoundException;
 import com.example.GooRoomBe.social.socialUser.SocialUser;
 import com.example.GooRoomBe.social.socialUser.SocialUserRepository;
 import com.example.GooRoomBe.social.label.domain.Label;
@@ -34,7 +35,7 @@ public class LabelService {
 
     @Transactional
     public void deleteLabel(String currentUserId, String labelId) {
-        Label label = labelRepository.findById(labelId).orElseThrow();
+        Label label = getLabel(labelId);
         if(label.getOwner().getId().equals(currentUserId)){
             labelRepository.delete(label);
         }
@@ -42,16 +43,16 @@ public class LabelService {
 
     @Transactional
     public void addMember(String labelId, String newMemberId) {
-        Label label = labelRepository.findById(labelId).orElseThrow();
-        SocialUser newMember = socialUserRepository.getUser(label.getOwner().getId());
+        Label label = getLabel(labelId);
+        SocialUser newMember = socialUserRepository.getUser(newMemberId);
         labelMemberService.addNewMember(label, newMember);
         labelRepository.save(label);
     }
 
 
     @Transactional
-    public void removeMember(String LabelId, String memberIdToRemove) {
-        Label label = labelRepository.findById(LabelId).orElseThrow();
+    public void removeMember(String labelId, String memberIdToRemove) {
+        Label label = getLabel(labelId);
         SocialUser memberToRemove = socialUserRepository.getUser(memberIdToRemove);
         label.removeMember(memberToRemove);
         labelRepository.save(label);
@@ -59,14 +60,14 @@ public class LabelService {
 
     @Transactional
     public void replaceMembers(String labelId, List<String> potentialMemberIds) {
-        Label label = labelRepository.findById(labelId).orElseThrow();
+        Label label = getLabel(labelId);
         labelMemberService.replaceMembers(label, potentialMemberIds);
         labelRepository.save(label);
     }
 
     @Transactional
     public void updateLabel(String labelId, String currentUserId, LabelUpdateRequestDto dto){
-        Label label = labelRepository.findById(labelId).orElseThrow();
+        Label label = getLabel(labelId);
 
         applyIfPresent(dto.labelName(), name -> labelNameService.changeLabelName(label, name));
         applyIfPresent(dto.exposure(), exposure -> label.updateExposure(currentUserId, exposure));
@@ -78,5 +79,9 @@ public class LabelService {
         if (value != null) {
             action.accept(value);
         }
+    }
+
+    private Label getLabel(String labelId) {
+        return labelRepository.findById(labelId).orElseThrow(()->new LabelNotFoundException(labelId));
     }
 }
