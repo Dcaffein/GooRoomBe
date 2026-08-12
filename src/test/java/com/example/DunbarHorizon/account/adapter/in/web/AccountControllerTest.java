@@ -5,6 +5,10 @@ import com.example.DunbarHorizon.account.adapter.in.web.dto.SignupRequestDto;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.UserProfileUpdateRequest;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.VerificationEmailRequestDto;
 import com.example.DunbarHorizon.account.application.dto.AuthTokenResult;
+import com.example.DunbarHorizon.account.domain.exception.RefreshTokenNotFoundException;
+import com.example.DunbarHorizon.account.domain.exception.TokenTheftDetectedException;
+import com.example.DunbarHorizon.global.security.exception.ExpiredTokenException;
+import com.example.DunbarHorizon.global.security.exception.InvalidTokenException;
 import com.example.DunbarHorizon.support.BaseControllerTest;
 import com.example.DunbarHorizon.support.WithMockCustomUser;
 import jakarta.servlet.http.Cookie;
@@ -19,6 +23,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class AccountControllerTest extends BaseControllerTest {
@@ -78,6 +83,62 @@ class AccountControllerTest extends BaseControllerTest {
 
         verify(authCookieManager).addAccessTokenCookie(any(), eq("new-at"));
         verify(authCookieManager).addRefreshTokenCookie(any(), eq("new-rt"));
+    }
+
+    @Test
+    @DisplayName("재발급 시 refresh token이 만료되었으면 401과 ExpiredTokenException을 반환한다")
+    void reissue_Expired_Returns401() throws Exception {
+        // given - 전 사용자가 7일마다 겪는 정상 흐름이다. 과거에는 500이 나가
+        //         프론트의 401 재로그인 분기를 비껴갔다.
+        String oldRt = "expired-rt";
+        given(loginUseCase.reissue(oldRt)).willThrow(new ExpiredTokenException());
+
+        // when & then
+        mockMvc.perform(patch("/api/auth/tokens")
+                        .cookie(new Cookie("refresh_token", oldRt)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("ExpiredTokenException"))
+                .andExpect(jsonPath("$.message").value("만료된 토큰입니다."));
+    }
+
+    @Test
+    @DisplayName("재발급 시 refresh token이 위조되었으면 401과 InvalidTokenException을 반환한다")
+    void reissue_Invalid_Returns401() throws Exception {
+        // given
+        String forgedRt = "forged-rt";
+        given(loginUseCase.reissue(forgedRt)).willThrow(new InvalidTokenException());
+
+        // when & then
+        mockMvc.perform(patch("/api/auth/tokens")
+                        .cookie(new Cookie("refresh_token", forgedRt)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("InvalidTokenException"));
+    }
+
+    @Test
+    @DisplayName("재발급 시 refresh_token 쿠키가 없으면 401과 RefreshTokenNotFoundException을 반환한다")
+    void reissue_NoCookie_Returns401() throws Exception {
+        // given - @CookieValue(required = false)이므로 null이 그대로 유스케이스에 전달된다
+        given(loginUseCase.reissue(null)).willThrow(new RefreshTokenNotFoundException());
+
+        // when & then
+        mockMvc.perform(patch("/api/auth/tokens"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("RefreshTokenNotFoundException"));
+    }
+
+    @Test
+    @DisplayName("재발급 시 토큰 재사용이 탐지되면 403과 TokenTheftDetectedException을 반환한다")
+    void reissue_TokenTheft_Returns403() throws Exception {
+        // given - 만료·위조(401)와 달리 재사용 탐지는 방어 동작이므로 403을 유지한다
+        String stolenRt = "stolen-rt";
+        given(loginUseCase.reissue(stolenRt)).willThrow(new TokenTheftDetectedException());
+
+        // when & then
+        mockMvc.perform(patch("/api/auth/tokens")
+                        .cookie(new Cookie("refresh_token", stolenRt)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("TokenTheftDetectedException"));
     }
 
     @Test

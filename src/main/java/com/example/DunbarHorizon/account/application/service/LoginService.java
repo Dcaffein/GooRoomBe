@@ -1,7 +1,7 @@
 package com.example.DunbarHorizon.account.application.service;
 
 import com.example.DunbarHorizon.account.application.port.in.LoginUseCase;
-import com.example.DunbarHorizon.account.domain.exception.ExpiredRefreshTokenException;
+import com.example.DunbarHorizon.account.domain.exception.RefreshTokenNotFoundException;
 import com.example.DunbarHorizon.global.event.DeviceTokenDeregisteredEvent;
 import com.example.DunbarHorizon.global.security.AuthPrincipal;
 import com.example.DunbarHorizon.account.application.dto.AuthTokenResult;
@@ -24,7 +24,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 
 @Service
@@ -79,6 +78,13 @@ public class LoginService implements LoginUseCase {
 
     @Override
     public AuthTokenResult reissue(String oldRefreshTokenValue) {
+        // 쿠키 부재는 토큰 파싱까지 가기 전에 걸러낸다. 그대로 넘기면 파싱 단계에서
+        // InvalidTokenException으로 뭉뚱그려져 "만료"와 "애초에 로그인 상태가 아님"이 구분되지 않는다.
+        if (oldRefreshTokenValue == null || oldRefreshTokenValue.isBlank()) {
+            throw new RefreshTokenNotFoundException();
+        }
+
+        // 만료·위조는 여기서 ExpiredTokenException / InvalidTokenException(둘 다 401)으로 올라간다.
         AuthPrincipal authPrincipal = authTokenProvider.validateToken(oldRefreshTokenValue);
 
         Optional<RefreshToken> tokenOpt = refreshTokenRepository.findByTokenValue(oldRefreshTokenValue);
@@ -90,9 +96,8 @@ public class LoginService implements LoginUseCase {
 
         RefreshToken refreshToken = tokenOpt.get();
 
-        if (refreshToken.getExpiryDate().isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
-            throw new ExpiredRefreshTokenException("리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.");
-        }
+        // DB 기준 만료 검증은 두지 않는다. expiryDate는 JWT의 exp에서 그대로 뽑은 값이므로
+        // DB 기준으로 만료면 위 validateToken에서 반드시 먼저 걸린다.
 
         String newAccessToken = authTokenProvider.createAccessToken(authPrincipal);
         String newRefreshToken = authTokenProvider.createRefreshToken(authPrincipal);
