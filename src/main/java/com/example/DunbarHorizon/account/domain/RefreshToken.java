@@ -37,10 +37,6 @@ public class RefreshToken extends BaseTimeAggregateRoot {
         this.expiryDate =  expiryDate;
     }
 
-    public boolean isExpired() {
-        return LocalDateTime.now().isAfter(this.expiryDate);
-    }
-
     public void rotateTokenValue(String newRefreshToken, LocalDateTime newExpiryDate) {
         this.tokenValue = newRefreshToken;
         this.expiryDate = newExpiryDate;
