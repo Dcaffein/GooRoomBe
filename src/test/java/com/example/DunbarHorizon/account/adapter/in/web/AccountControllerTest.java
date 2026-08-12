@@ -5,6 +5,8 @@ import com.example.DunbarHorizon.account.adapter.in.web.dto.SignupRequestDto;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.UserProfileUpdateRequest;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.VerificationEmailRequestDto;
 import com.example.DunbarHorizon.account.application.dto.AuthTokenResult;
+import com.example.DunbarHorizon.account.domain.exception.InvalidCredentialsException;
+import com.example.DunbarHorizon.account.domain.exception.InvalidVerificationTokenException;
 import com.example.DunbarHorizon.account.domain.exception.RefreshTokenNotFoundException;
 import com.example.DunbarHorizon.account.domain.exception.TokenTheftDetectedException;
 import com.example.DunbarHorizon.global.security.exception.ExpiredTokenException;
@@ -21,6 +23,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -29,16 +32,52 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AccountControllerTest extends BaseControllerTest {
 
     @Test
-    @DisplayName("회원가입 요청 시 201 Created를 반환한다")
+    @DisplayName("회원가입 완료 시 쿠키를 설정하고 201 Created를 반환한다")
     void signup_Success() throws Exception {
-        SignupRequestDto request = new SignupRequestDto("test@test.com", "tester", "Pw123!@#");
+        SignupRequestDto request = new SignupRequestDto("valid-token", "tester", "Pw123!@#");
+        given(signupUseCase.signup(anyString(), anyString(), anyString()))
+                .willReturn(new AuthTokenResult("access-token", "refresh-token"));
 
         mockMvc.perform(post("/api/auth/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        verify(signupUseCase).signup(eq("test@test.com"), eq("Pw123!@#"), eq("tester"));
+        // 이메일은 받지 않는다 — 토큰이 가리키는 값을 서버가 쓴다
+        verify(signupUseCase).signup(eq("valid-token"), eq("Pw123!@#"), eq("tester"));
+        verify(authCookieManager).addAccessTokenCookie(any(), eq("access-token"));
+        verify(authCookieManager).addRefreshTokenCookie(any(), eq("refresh-token"));
+    }
+
+    @Test
+    @DisplayName("만료된 토큰으로 회원가입 완료 시 410을 반환하고 쿠키를 설정하지 않는다")
+    void signup_ExpiredToken() throws Exception {
+        SignupRequestDto request = new SignupRequestDto("expired-token", "tester", "Pw123!@#");
+        given(signupUseCase.signup(anyString(), anyString(), anyString()))
+                .willThrow(new InvalidVerificationTokenException());
+
+        mockMvc.perform(post("/api/auth/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.error").value("InvalidVerificationTokenException"));
+
+        verify(authCookieManager, never()).addAccessTokenCookie(any(), any());
+    }
+
+    @Test
+    @DisplayName("로그인 실패 시 401과 사유를 드러내지 않는 메시지를 반환한다")
+    void login_Failure_Returns401() throws Exception {
+        LoginRequestDto request = new LoginRequestDto("test@test.com", "wrong-password");
+        given(loginUseCase.login(anyString(), anyString()))
+                .willThrow(new InvalidCredentialsException());
+
+        mockMvc.perform(post("/api/auth/tokens")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("InvalidCredentialsException"))
+                .andExpect(jsonPath("$.message").value("이메일 또는 비밀번호가 올바르지 않습니다."));
     }
 
     @Test
@@ -142,8 +181,8 @@ class AccountControllerTest extends BaseControllerTest {
     }
 
     @Test
-    @DisplayName("이메일 인증 메일 발송 요청 시 201 Created를 반환한다")
-    void sendVerificationEmail_Success() throws Exception {
+    @DisplayName("가입 접수 시 201 Created를 반환한다")
+    void requestVerification_Success() throws Exception {
         VerificationEmailRequestDto request = new VerificationEmailRequestDto("test@test.com", "http://redirect.com");
 
         mockMvc.perform(post("/api/auth/verifications")
@@ -151,19 +190,28 @@ class AccountControllerTest extends BaseControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        verify(verificationUseCase).sendVerificationEmail(eq("test@test.com"), eq("http://redirect.com"));
+        verify(verificationUseCase).requestVerification(eq("test@test.com"), eq("http://redirect.com"));
     }
 
     @Test
-    @DisplayName("이메일 토큰 검증 성공 시 200 OK를 반환한다")
-    void verifyEmail_Success() throws Exception {
-        String token = "valid-token";
+    @DisplayName("토큰 유효성 확인 시 대상 이메일을 반환한다")
+    void resolveVerification_Success() throws Exception {
+        given(verificationUseCase.resolveEmail("valid-token")).willReturn("test@test.com");
 
-        mockMvc.perform(patch("/api/auth/verifications")
-                        .param("token", token))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/auth/verifications/{token}", "valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("test@test.com"));
+    }
 
-        verify(verificationUseCase).verifyEmail(eq(token));
+    @Test
+    @DisplayName("만료된 토큰으로 유효성 확인 시 410과 InvalidVerificationTokenException을 반환한다")
+    void resolveVerification_ExpiredToken() throws Exception {
+        given(verificationUseCase.resolveEmail("expired-token"))
+                .willThrow(new InvalidVerificationTokenException());
+
+        mockMvc.perform(get("/api/auth/verifications/{token}", "expired-token"))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.error").value("InvalidVerificationTokenException"));
     }
 
     @Test

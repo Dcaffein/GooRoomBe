@@ -55,6 +55,9 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/tokens").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/auth/tokens").permitAll()
+                        // 가입 토큰 유효성 확인. /** 로 넓히면 이 경로 아래 추가되는 엔드포인트가
+                        // 자동으로 공개되므로 메서드와 깊이를 명시해 좁게 연다.
+                        .requestMatchers(HttpMethod.GET, "/api/auth/verifications/*").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2

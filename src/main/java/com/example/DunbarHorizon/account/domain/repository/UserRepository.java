@@ -17,6 +17,4 @@ public interface UserRepository {
     void delete(User existingUser);
 
     void flush();
-
-    int deleteOldPendingUsers(LocalDateTime threshold);
 }

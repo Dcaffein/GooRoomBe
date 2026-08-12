@@ -7,6 +7,7 @@ import com.example.DunbarHorizon.account.application.service.LoginService;
 import com.example.DunbarHorizon.account.domain.*;
 import com.example.DunbarHorizon.account.domain.repository.AuthRepository;
 import com.example.DunbarHorizon.account.domain.repository.RefreshTokenRepository;
+import com.example.DunbarHorizon.account.domain.exception.InvalidCredentialsException;
 import com.example.DunbarHorizon.account.domain.exception.RefreshTokenNotFoundException;
 import com.example.DunbarHorizon.account.domain.exception.TokenTheftDetectedException;
 import com.example.DunbarHorizon.account.domain.repository.UserRepository;
@@ -24,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -32,6 +34,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
@@ -54,8 +57,7 @@ class LoginServiceTest {
         // given
         User user = User.builder().email("test@test.com").build();
         ReflectionTestUtils.setField(user, "id", 1L);
-        Auth auth = spy(Auth.createLocalAuth(1L, "encoded-pw"));
-        ReflectionTestUtils.setField(auth, "verified", true);
+        Auth auth = Auth.createLocalAuth(1L, "encoded-pw");
 
         given(userRepository.findByEmail(anyString())).willReturn(Optional.of(user));
         given(authRepository.findByUserIdAndProvider(1L, AuthProvider.LOCAL)).willReturn(Optional.of(auth));
@@ -68,6 +70,46 @@ class LoginServiceTest {
         // then
         assertThat(result.accessToken()).isEqualTo("at");
         verify(refreshTokenRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("로그인 실패 세 경우는 모두 같은 예외와 같은 메시지를 던진다 - 계정 열거 차단")
+    void login_실패_세_경우가_구분되지_않는다() {
+        // given - ① 미가입 이메일
+        given(userRepository.findByEmail("unknown@test.com")).willReturn(Optional.empty());
+
+        // ② LOCAL 자격증명 없음 (구글 전용 계정)
+        User oauthOnly = User.builder().email("oauth@test.com").build();
+        ReflectionTestUtils.setField(oauthOnly, "id", 2L);
+        given(userRepository.findByEmail("oauth@test.com")).willReturn(Optional.of(oauthOnly));
+        given(authRepository.findByUserIdAndProvider(2L, AuthProvider.LOCAL)).willReturn(Optional.empty());
+
+        // ③ 비밀번호 불일치
+        User localUser = User.builder().email("local@test.com").build();
+        ReflectionTestUtils.setField(localUser, "id", 3L);
+        given(userRepository.findByEmail("local@test.com")).willReturn(Optional.of(localUser));
+        given(authRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
+                .willReturn(Optional.of(Auth.createLocalAuth(3L, "encoded-pw")));
+        given(passwordHasher.matches("wrong-pw", "encoded-pw")).willReturn(false);
+
+        // when
+        Throwable unknownEmail = catchThrowable(() -> loginService.login("unknown@test.com", "pw"));
+        Throwable noLocalAuth = catchThrowable(() -> loginService.login("oauth@test.com", "pw"));
+        Throwable wrongPassword = catchThrowable(() -> loginService.login("local@test.com", "wrong-pw"));
+
+        // then - 타입도 메시지도 갈리지 않아야 상태코드나 본문으로 가입 여부를 판별할 수 없다
+        assertThat(unknownEmail).isInstanceOf(InvalidCredentialsException.class);
+        assertThat(noLocalAuth).isInstanceOf(InvalidCredentialsException.class);
+        assertThat(wrongPassword).isInstanceOf(InvalidCredentialsException.class);
+
+        assertThat(noLocalAuth.getMessage()).isEqualTo(unknownEmail.getMessage());
+        assertThat(wrongPassword.getMessage()).isEqualTo(unknownEmail.getMessage());
+
+        assertThat(((InvalidCredentialsException) unknownEmail).getHttpStatus())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        // 실패 경로에서 토큰이 발급되면 안 된다
+        verify(refreshTokenRepository, never()).save(any());
     }
 
     @ParameterizedTest

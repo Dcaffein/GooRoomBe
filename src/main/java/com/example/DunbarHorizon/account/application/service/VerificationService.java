@@ -2,12 +2,8 @@ package com.example.DunbarHorizon.account.application.service;
 
 import com.example.DunbarHorizon.account.application.port.in.VerificationUseCase;
 import com.example.DunbarHorizon.account.application.port.out.EmailPort;
-import com.example.DunbarHorizon.account.domain.exception.*;
-import com.example.DunbarHorizon.account.domain.Auth;
-import com.example.DunbarHorizon.account.domain.AuthProvider;
-import com.example.DunbarHorizon.account.domain.User;
-import com.example.DunbarHorizon.account.domain.repository.AuthRepository;
-import com.example.DunbarHorizon.account.domain.repository.EmailVerificationTokenRepository;
+import com.example.DunbarHorizon.account.domain.exception.InvalidVerificationTokenException;
+import com.example.DunbarHorizon.account.domain.repository.PendingSignupRepository;
 import com.example.DunbarHorizon.account.domain.repository.UserRepository;
 import com.example.DunbarHorizon.global.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
@@ -16,48 +12,32 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
+@Transactional(readOnly = true)
 public class VerificationService implements VerificationUseCase {
+
     private final UserRepository userRepository;
-    private final AuthRepository authRepository;
-    private final EmailVerificationTokenRepository verificationTokenRepository;
+    private final PendingSignupRepository pendingSignupRepository;
     private final EmailPort emailPort;
 
+    /**
+     * 가입 접수. 호출자는 이메일 등록 여부를 알 수 없다 — 어느 경우든 예외 없이 끝난다.
+     * 구분은 오직 발송되는 메일 내용으로만 이뤄지므로, 상황을 아는 사람은 이메일 주인뿐이다.
+     */
     @Override
-    public void sendVerificationEmail(String email, String redirectPage) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("가입되지 않은 이메일입니다."));
-
-        Auth localAuth = authRepository.findByUserIdAndProvider(user.getId(), AuthProvider.LOCAL)
-                .orElseThrow(() -> new AuthNotFoundException("로컬 가입 정보가 존재하지 않습니다."));
-
-        if (localAuth.isVerified()) {
-            throw new AlreadyRegisteredEmailException(email);
+    public void requestVerification(String email, String redirectPage) {
+        if (userRepository.findByEmail(email).isPresent()) {
+            emailPort.sendAlreadyRegisteredEmail(email);
+            return;
         }
 
-        verificationTokenRepository.deleteByUserId(user.getId());
-
         String token = UuidUtil.createV7().toString();
-        verificationTokenRepository.save(user.getId(), token);
-
-        emailPort.sendVerificationEmail(user.getEmail(), token, redirectPage);
+        pendingSignupRepository.save(token, email);
+        emailPort.sendSignupVerificationEmail(email, token, redirectPage);
     }
 
     @Override
-    public void verifyEmail(String tokenStr) {
-        Long userId = verificationTokenRepository.findUserIdByToken(tokenStr)
-                .orElseThrow(() -> new VerificationTokenNotFoundException("유효하지 않거나 존재하지 않는 인증 토큰입니다."));
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("사용자를 찾을 수 없습니다."));
-
-        Auth localAuth = authRepository.findByUserIdAndProvider(userId, AuthProvider.LOCAL)
-                .orElseThrow(() -> new AuthNotFoundException("존재하지 않는 인증 정보입니다."));
-
-        localAuth.verify();
-        user.activate();
-        authRepository.save(localAuth);
-        userRepository.save(user);
-        verificationTokenRepository.deleteByUserId(userId);
+    public String resolveEmail(String token) {
+        return pendingSignupRepository.findEmailByToken(token)
+                .orElseThrow(InvalidVerificationTokenException::new);
     }
 }

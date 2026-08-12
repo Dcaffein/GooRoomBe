@@ -7,9 +7,8 @@ import com.example.DunbarHorizon.global.security.AuthPrincipal;
 import com.example.DunbarHorizon.account.application.dto.AuthTokenResult;
 import com.example.DunbarHorizon.account.application.port.out.AuthTokenProvider;
 import com.example.DunbarHorizon.account.application.port.out.PasswordHasher;
-import com.example.DunbarHorizon.account.domain.exception.NotVerifiedException;
+import com.example.DunbarHorizon.account.domain.exception.InvalidCredentialsException;
 import com.example.DunbarHorizon.account.domain.exception.TokenTheftDetectedException;
-import com.example.DunbarHorizon.account.domain.exception.UserNotFoundException;
 import com.example.DunbarHorizon.account.domain.Auth;
 import com.example.DunbarHorizon.account.domain.AuthProvider;
 import com.example.DunbarHorizon.account.domain.RefreshToken;
@@ -18,14 +17,15 @@ import com.example.DunbarHorizon.account.domain.repository.AuthRepository;
 import com.example.DunbarHorizon.account.domain.repository.RefreshTokenRepository;
 import com.example.DunbarHorizon.account.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -37,21 +37,29 @@ public class LoginService implements LoginUseCase {
     private final PasswordHasher passwordHasher;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * 실패 세 경우(미가입 이메일 / LOCAL 자격증명 없음 / 비밀번호 불일치)를 구분하지 않는다.
+     * 응답이 갈리면 비밀번호를 몰라도 상태코드만으로 가입 여부를 판별할 수 있기 때문이다.
+     * 사유는 로그로만 남긴다.
+     */
     @Override
     @Transactional
     public AuthTokenResult login(String email, String password) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("사용자를 찾을 수 없습니다."));
+                .orElseThrow(() -> {
+                    log.warn("[login] 미가입 이메일로 로그인 시도");
+                    return new InvalidCredentialsException();
+                });
 
         Auth localAuth = authRepository.findByUserIdAndProvider(user.getId(), AuthProvider.LOCAL)
-                .orElseThrow(() -> new BadCredentialsException("이메일/비밀번호를 확인해주세요."));
+                .orElseThrow(() -> {
+                    log.warn("[login] LOCAL 자격증명 없는 계정으로 로그인 시도. userId={}", user.getId());
+                    return new InvalidCredentialsException();
+                });
 
         if (!passwordHasher.matches(password, localAuth.getPassword())) {
-            throw new BadCredentialsException("비밀번호가 일치하지 않습니다.");
-        }
-
-        if (!localAuth.isVerified()) {
-            throw new NotVerifiedException(localAuth.getId());
+            log.warn("[login] 비밀번호 불일치. userId={}", user.getId());
+            throw new InvalidCredentialsException();
         }
 
         return issueTokens(user);

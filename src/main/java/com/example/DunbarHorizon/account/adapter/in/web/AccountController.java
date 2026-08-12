@@ -10,6 +10,7 @@ import com.example.DunbarHorizon.account.adapter.in.web.dto.LogoutRequest;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.SignupRequestDto;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.UserProfileUpdateRequest;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.VerificationEmailRequestDto;
+import com.example.DunbarHorizon.account.adapter.in.web.dto.VerificationTokenResponse;
 import com.example.DunbarHorizon.account.application.port.out.ProfileImageStoragePort;
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
 import com.example.DunbarHorizon.global.imageStorage.PresignedUploadResult;
@@ -33,9 +34,15 @@ public class AccountController {
     private final ProfileImageStoragePort profileImageStoragePort;
     private final AuthCookieManager authCookieManager;
 
+    /**
+     * 회원가입 완료. 이메일 소유 증명을 마친 토큰을 들고 와야 하며, 이 지점에서 처음으로
+     * 계정 행이 만들어진다. 증명과 비밀번호 설정을 방금 마친 사람이므로 곧바로 로그인시킨다.
+     */
     @PostMapping("/users")
-    public ResponseEntity<Void> signup(@RequestBody @Valid SignupRequestDto dto) {
-        signupUseCase.signup(dto.email(), dto.password(), dto.nickname());
+    public ResponseEntity<Void> signup(@RequestBody @Valid SignupRequestDto dto,
+                                       HttpServletResponse response) {
+        AuthTokenResult jwts = signupUseCase.signup(dto.token(), dto.password(), dto.nickname());
+        handleTokenResponse(response, jwts);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -67,17 +74,25 @@ public class AccountController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * 가입 접수(1단계). 재요청하면 그것이 곧 재발송이다.
+     * 이미 가입된 이메일이어도 같은 201을 돌려준다 — 구분은 발송되는 메일 내용으로만 한다.
+     */
     @PostMapping("/verifications")
-    public ResponseEntity<Void> sendVerificationEmail(
+    public ResponseEntity<Void> requestVerification(
             @RequestBody @Valid VerificationEmailRequestDto verificationEmailRequestDto) {
-        verificationUseCase.sendVerificationEmail(verificationEmailRequestDto.email(), verificationEmailRequestDto.redirectPage());
+        verificationUseCase.requestVerification(
+                verificationEmailRequestDto.email(), verificationEmailRequestDto.redirectPage());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @PatchMapping("/verifications")
-    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
-        verificationUseCase.verifyEmail(token);
-        return ResponseEntity.ok().build();
+    /**
+     * 토큰 유효성 확인. 프론트가 비밀번호 입력 폼을 그리기 전에 호출한다.
+     * 없으면 사용자가 폼을 다 채워 제출한 뒤에야 만료를 알게 된다.
+     */
+    @GetMapping("/verifications/{token}")
+    public ResponseEntity<VerificationTokenResponse> resolveVerification(@PathVariable String token) {
+        return ResponseEntity.ok(new VerificationTokenResponse(verificationUseCase.resolveEmail(token)));
     }
 
     @PostMapping("/users/me/profile-image/presign")

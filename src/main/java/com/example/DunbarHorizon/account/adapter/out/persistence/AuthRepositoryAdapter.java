@@ -7,7 +7,6 @@ import com.example.DunbarHorizon.account.domain.repository.AuthRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Repository
@@ -34,15 +33,5 @@ public class AuthRepositoryAdapter implements AuthRepository {
     @Override
     public void deleteAllByUserId(Long userId) {
         authJpaRepository.deleteAllByUserId(userId);
-    }
-
-    @Override
-    public void deleteUnverifiedByUserId(Long userId) {
-        authJpaRepository.deleteUnverifiedByUserId(userId);
-    }
-
-    @Override
-    public int deleteOldUnverifiedAuths(LocalDateTime threshold) {
-        return authJpaRepository.deleteOldUnverifiedAuths(threshold);
     }
 }

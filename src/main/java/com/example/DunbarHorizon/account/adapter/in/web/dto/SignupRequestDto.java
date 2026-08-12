@@ -1,14 +1,16 @@
 package com.example.DunbarHorizon.account.adapter.in.web.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+/**
+ * 회원가입 완료 요청. 이메일은 받지 않는다 — 토큰이 가리키는 값을 서버가 쓴다.
+ * 클라이언트가 이메일을 함께 보내면 토큰과 다른 주소로 계정을 만들 여지가 생긴다.
+ */
 public record SignupRequestDto(
-        @NotBlank(message = "이메일은 필수입니다.")
-        @Email(message = "이메일 형식이 올바르지 않습니다.")
-        String email,
+        @NotBlank(message = "인증 토큰은 필수입니다.")
+        String token,
 
         @NotBlank(message = "닉네임은 필수입니다.")
         @Size(min = 1, max = 20, message = "닉네임은 1자 이상 20자 이하로 입력해주세요.")

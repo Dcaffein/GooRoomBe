@@ -3,7 +3,6 @@ package com.example.DunbarHorizon.account.application.service;
 import com.example.DunbarHorizon.account.application.port.out.PasswordHasher;
 import com.example.DunbarHorizon.account.domain.Auth;
 import com.example.DunbarHorizon.account.domain.User;
-import com.example.DunbarHorizon.account.domain.UserStatus;
 import com.example.DunbarHorizon.account.domain.exception.AlreadyRegisteredEmailException;
 import com.example.DunbarHorizon.account.domain.repository.AuthRepository;
 import com.example.DunbarHorizon.account.domain.repository.UserRepository;
@@ -32,14 +31,9 @@ public class DevUserService {
             throw new AlreadyRegisteredEmailException(email);
         });
 
-        User user = User.builder()
-                .email(email)
-                .nickname(nickname)
-                .status(UserStatus.ACTIVE)
-                .build();
-        userRepository.save(user);
+        User user = userRepository.save(User.createActive(email, nickname));
 
-        Auth auth = Auth.createVerifiedLocalAuth(user.getId(), passwordHasher.encode(DEFAULT_PASSWORD));
+        Auth auth = Auth.createLocalAuth(user.getId(), passwordHasher.encode(DEFAULT_PASSWORD));
         authRepository.save(auth);
 
         eventPublisher.publishEvent(new UserActivatedEvent(user.getId(), user.getNickname(), user.getProfileImage()));
