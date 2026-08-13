@@ -1,7 +1,6 @@
 package com.example.DunbarHorizon.account.domain;
 
-import com.example.DunbarHorizon.account.domain.policy.PasswordCipher;
-import com.example.DunbarHorizon.account.domain.policy.PasswordPolicy;
+import com.example.DunbarHorizon.account.domain.exception.InvalidPasswordException;
 import com.example.DunbarHorizon.global.common.BaseTimeAggregateRoot;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -16,6 +15,12 @@ import lombok.NoArgsConstructor;
 })
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Auth extends BaseTimeAggregateRoot {
+
+    /** 영문·숫자·특수문자(!@#$%^&*) 포함 8~20자. 웹 DTO의 @Pattern이 이 값을 참조한다. */
+    public static final String PASSWORD_REGEX =
+            "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,20}$";
+    public static final String PASSWORD_MESSAGE =
+            "비밀번호는 영문, 숫자, 특수문자를 포함하여 8~20자로 입력해주세요.";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -46,7 +51,7 @@ public class Auth extends BaseTimeAggregateRoot {
      * 기존 행의 비밀번호를 덮어쓰는 경로도 두지 않는다.
      */
     public static Auth createLocalAuth(Long userId, String rawPassword, PasswordCipher cipher) {
-        PasswordPolicy.validate(rawPassword);
+        validatePassword(rawPassword);
         return Auth.builder()
                 .userId(userId)
                 .provider(AuthProvider.LOCAL)
@@ -68,5 +73,16 @@ public class Auth extends BaseTimeAggregateRoot {
                 .provider(provider)
                 .providerId(providerId)
                 .build();
+    }
+
+    /**
+     * 자격증명이 만들어지는 지점에서 검증하므로 어느 진입 경로로 들어오든 규칙을 우회할 수 없다.
+     * 웹 계층의 {@code @Pattern}은 그대로 둔다 — 형식 오류를 즉시 400으로 돌려주는 것은
+     * 어댑터의 일이고, 그 애너테이션이 위 상수를 참조하므로 규칙은 한 벌만 존재한다.
+     */
+    private static void validatePassword(String rawPassword) {
+        if (rawPassword == null || !rawPassword.matches(PASSWORD_REGEX)) {
+            throw new InvalidPasswordException(PASSWORD_MESSAGE);
+        }
     }
 }

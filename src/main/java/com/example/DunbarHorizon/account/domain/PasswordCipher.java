@@ -1,4 +1,4 @@
-package com.example.DunbarHorizon.account.domain.policy;
+package com.example.DunbarHorizon.account.domain;
 
 /**
  * 도메인이 비밀번호를 다루기 위해 필요한 최소 능력.

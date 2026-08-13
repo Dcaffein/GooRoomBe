@@ -3,7 +3,6 @@ package com.example.DunbarHorizon.account.adapter.out.persistence;
 import com.example.DunbarHorizon.account.adapter.out.persistence.jpa.UserJpaRepository;
 import com.example.DunbarHorizon.account.domain.User;
 import com.example.DunbarHorizon.account.domain.UserStatus;
-import com.example.DunbarHorizon.account.domain.policy.EmailPolicy;
 import com.example.DunbarHorizon.account.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -26,7 +25,7 @@ public class UserRepositoryAdapter implements UserRepository {
      */
     @Override
     public Optional<User> findByEmail(String email) {
-        return userJpaRepository.findByEmail(EmailPolicy.normalize(email));
+        return userJpaRepository.findByEmail(User.normalizeEmail(email));
     }
 
     @Override

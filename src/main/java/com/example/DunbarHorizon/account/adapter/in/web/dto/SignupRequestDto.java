@@ -1,7 +1,7 @@
 package com.example.DunbarHorizon.account.adapter.in.web.dto;
 
-import com.example.DunbarHorizon.account.domain.policy.NicknamePolicy;
-import com.example.DunbarHorizon.account.domain.policy.PasswordPolicy;
+import com.example.DunbarHorizon.account.domain.Auth;
+import com.example.DunbarHorizon.account.domain.User;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -15,11 +15,11 @@ public record SignupRequestDto(
         String token,
 
         @NotBlank(message = "닉네임은 필수입니다.")
-        @Size(min = NicknamePolicy.MIN_LENGTH, max = NicknamePolicy.MAX_LENGTH,
-                message = NicknamePolicy.LENGTH_MESSAGE)
+        @Size(min = User.NICKNAME_MIN_LENGTH, max = User.NICKNAME_MAX_LENGTH,
+                message = User.NICKNAME_LENGTH_MESSAGE)
         String nickname,
 
         @NotBlank(message = "비밀번호는 필수입니다.")
-        @Pattern(regexp = PasswordPolicy.REGEX, message = PasswordPolicy.MESSAGE)
+        @Pattern(regexp = Auth.PASSWORD_REGEX, message = Auth.PASSWORD_MESSAGE)
         String password
 ) {}
