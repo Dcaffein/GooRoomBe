@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.account.adapter.in.web.dto;
 
 import com.example.DunbarHorizon.account.domain.policy.NicknamePolicy;
+import com.example.DunbarHorizon.account.domain.policy.PasswordPolicy;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -19,10 +20,6 @@ public record SignupRequestDto(
         String nickname,
 
         @NotBlank(message = "비밀번호는 필수입니다.")
-        // 영문, 숫자, 특수문자(!@#$%^&*) 포함 8~20자
-        @Pattern(
-                regexp = "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,20}$",
-                message = "비밀번호는 영문, 숫자, 특수문자를 포함하여 8~20자로 입력해주세요."
-        )
+        @Pattern(regexp = PasswordPolicy.REGEX, message = PasswordPolicy.MESSAGE)
         String password
 ) {}

@@ -42,7 +42,7 @@ public class SignupService implements SignupUseCase {
 
         // save()가 끝나야 id가 생긴다. 이벤트 발행이 그 뒤여야 하는 이유다.
         User user = userRepository.save(User.createActive(email, nickname));
-        authRepository.save(Auth.createLocalAuth(user.getId(), passwordHasher.encode(password)));
+        authRepository.save(Auth.createLocalAuth(user.getId(), password, passwordHasher));
 
         publishActivated(user);
 

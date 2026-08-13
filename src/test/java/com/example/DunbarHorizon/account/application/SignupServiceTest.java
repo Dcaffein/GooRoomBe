@@ -61,10 +61,10 @@ class SignupServiceTest {
                 .willReturn(Optional.of("test@test.com"));
         given(userRepository.findByEmail("test@test.com")).willReturn(Optional.empty());
         givenUserIsAssignedId(1L);
-        given(passwordHasher.encode("pw123!A")).willReturn("encoded-pw");
+        given(passwordHasher.encode("Pw12345!")).willReturn("encoded-pw");
 
         // when
-        signupService.signup("valid-token", "pw123!A", "tester");
+        signupService.signup("valid-token", "Pw12345!", "tester");
 
         // then
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
@@ -87,7 +87,7 @@ class SignupServiceTest {
         given(passwordHasher.encode(any())).willReturn("encoded-pw");
 
         // when
-        signupService.signup("valid-token", "pw123!A", "tester");
+        signupService.signup("valid-token", "Pw12345!", "tester");
 
         // then - 이벤트가 누락되면 가입은 되는데 소셜 그래프에 노드가 없는 계정이 만들어진다
         ArgumentCaptor<UserActivatedEvent> captor = ArgumentCaptor.forClass(UserActivatedEvent.class);
@@ -103,7 +103,7 @@ class SignupServiceTest {
         given(pendingSignupRepository.consumeEmailByToken("expired-token")).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> signupService.signup("expired-token", "pw123!A", "tester"))
+        assertThatThrownBy(() -> signupService.signup("expired-token", "Pw12345!", "tester"))
                 .isInstanceOf(InvalidVerificationTokenException.class);
 
         verify(userRepository, never()).save(any());
@@ -122,10 +122,10 @@ class SignupServiceTest {
         given(passwordHasher.encode(any())).willReturn("encoded-pw");
 
         // when
-        signupService.signup("one-shot", "pw123!A", "tester");
+        signupService.signup("one-shot", "Pw12345!", "tester");
 
         // then
-        assertThatThrownBy(() -> signupService.signup("one-shot", "other-pw!1A", "attacker"))
+        assertThatThrownBy(() -> signupService.signup("one-shot", "OtherPw!1A", "attacker"))
                 .isInstanceOf(InvalidVerificationTokenException.class);
 
         verify(userRepository, times(1)).save(any());
@@ -141,7 +141,7 @@ class SignupServiceTest {
                 .willReturn(Optional.of(User.createActive("test@test.com", "already")));
 
         // when & then
-        assertThatThrownBy(() -> signupService.signup("valid-token", "pw123!A", "tester"))
+        assertThatThrownBy(() -> signupService.signup("valid-token", "Pw12345!", "tester"))
                 .isInstanceOf(AlreadyRegisteredEmailException.class);
 
         verify(userRepository, never()).save(any());

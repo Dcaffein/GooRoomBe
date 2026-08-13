@@ -57,7 +57,8 @@ class LoginServiceTest {
         // given
         User user = User.builder().email("test@test.com").build();
         ReflectionTestUtils.setField(user, "id", 1L);
-        Auth auth = Auth.createLocalAuth(1L, "encoded-pw");
+        given(passwordHasher.encode("Raw12345!")).willReturn("encoded-pw");
+        Auth auth = Auth.createLocalAuth(1L, "Raw12345!", passwordHasher);
 
         given(userRepository.findByEmail(anyString())).willReturn(Optional.of(user));
         given(authRepository.findByUserIdAndProvider(1L, AuthProvider.LOCAL)).willReturn(Optional.of(auth));
@@ -87,9 +88,12 @@ class LoginServiceTest {
         // ③ 비밀번호 불일치
         User localUser = User.builder().email("local@test.com").build();
         ReflectionTestUtils.setField(localUser, "id", 3L);
+        given(passwordHasher.encode("Raw12345!")).willReturn("encoded-pw");
+        // given(...) 인자 안에서 다른 목을 호출하면 Mockito가 미완성 스터빙으로 본다
+        Auth localAuth = Auth.createLocalAuth(3L, "Raw12345!", passwordHasher);
         given(userRepository.findByEmail("local@test.com")).willReturn(Optional.of(localUser));
         given(authRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
-                .willReturn(Optional.of(Auth.createLocalAuth(3L, "encoded-pw")));
+                .willReturn(Optional.of(localAuth));
         given(passwordHasher.matches("wrong-pw", "encoded-pw")).willReturn(false);
 
         // when

@@ -57,7 +57,7 @@ public class LoginService implements LoginUseCase {
                     return new InvalidCredentialsException();
                 });
 
-        if (!passwordHasher.matches(password, localAuth.getPassword())) {
+        if (!localAuth.matches(password, passwordHasher)) {
             log.warn("[login] 비밀번호 불일치. userId={}", user.getId());
             throw new InvalidCredentialsException();
         }
