@@ -1,178 +1,116 @@
-# PLAN — task-90: 로컬 회원가입 사전 인증 전환 및 로그인 응답 정규화
+# PLAN — task-91: OAuth2 인증 실패 처리 추가
 
 ## 작업 목표
 
-1. 로컬 회원가입을 **C-2 사전 인증**으로 전환한다.
-   `이메일 접수 → 메일 → 링크 클릭(소유 증명) → 그 페이지에서 비밀번호·닉네임 입력 → 계정 생성`
-2. 로컬/OAuth를 **단일 모델**로 통일한다. 생성된 계정은 경로 무관하게 항상 인증 완료 상태.
-3. 로그인 실패 응답을 **단일 401**로 정규화하고 내부 PK 노출을 제거한다.
+OAuth 로그인이 실패했을 때 사용자를 **프론트엔드로 돌려보낸다.** 현재는 백엔드 도메인에서
+401 JSON 원문을 보게 되고 돌아갈 방법이 없다.
 
 ---
 
 ## 현황 분석
 
-### 현재 플로우와 문제 위치
+### 실패가 갈 곳이 없다
 
-```
-POST /api/auth/users {email, pw, nickname}
-  └ SignupService:28  findByEmail → 없으면 생성 (dedup)
-    SignupService:30  if (!user.isPending()) throw      ← ACTIVE만 보호
-    SignupService:37  existingAuth.overwritePassword()  ← ★ 취약점
-POST /api/auth/verifications {email}
-  └ VerificationService:38  기존 토큰 삭제 → :41 새 토큰 → :43 발송
-PATCH /api/auth/verifications?token=
-  └ VerificationService:57  verify() + :58 activate()   ← 자격증명 미검증
+`SecurityConfig:63-68`의 `oauth2Login`에 `successHandler`만 있고 `failureHandler`가 없다.
+
+```java
+.oauth2Login(oauth2 -> oauth2
+        .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
+        .successHandler(oauth2SuccessHandler)   // 성공만 처리
+);
 ```
 
-`Auth.verified`가 유일한 방어선이고, 토큰은 `userId`만 담는다
-(`EmailVerificationTokenRedisAdapter:23`). 클릭 시점에 그 행에 어떤 비밀번호가 있든 승인된다.
+Spring Security 기본값 `SimpleUrlAuthenticationFailureHandler`가 `/login?error`로 리다이렉트하는데,
+그 경로는 `SecurityConfig:43-61`의 `permitAll` 목록에 없다.
 
-### 전환 후 죽는 코드
+```
+OAuth 실패 → /login?error → anyRequest().authenticated()
+           → JwtAuthenticationEntryPoint → 401 JSON (백엔드 도메인)
+```
 
-C-2에서는 미인증 Auth도 PENDING User도 생성되지 않으므로 아래가 전부 도달 불가가 된다.
+성공은 `OAuth2AuthenticationSuccessHandler:36`이 `frontendBaseUrl`로 돌려보내는데
+실패만 대칭이 깨져 있다.
 
-| 대상 | 위치 |
-|---|---|
-| `Auth.verified` + `verify()` + `overwritePassword()` | `Auth.java:35,46,86` |
-| `User.isPending()` / `overwritePendingProfile()` / `UserStatus.PENDING` | `User.java:61,71` |
-| `User.activate()` | `User.java:86` — 호출부 2곳이 모두 사라짐. `deactivate()`는 애초에 호출부 없음 |
-| `NotVerifiedException` + `LoginService:53-55` | — |
-| `AccountCleanupService` / `Scheduler` / `EventListener` / `UseCase` | 4개 클래스 |
-| `deleteOldUnverifiedAuths` / `deleteOldPendingUsers` / `deleteUnverifiedByUserId` | 각 3계층 |
-| `EmailVerificationTokenRepository` + Redis 어댑터 | 대체됨 |
+### 도달 경로
 
-### 확인된 제약
+| 상황 | 예외/코드 | 빈도 |
+|---|---|---|
+| **동의 화면에서 취소** | `access_denied` (구글이 반환) | **상시. 정상적인 사용자 행동이다** |
+| `email_verified: false` | `email_not_verified` | task-90 이후. `CustomOAuth2UserService:32-36` |
+| 토큰 교환·공급자 통신 실패 | 다양 | 장애 시 |
+| 지원하지 않는 provider | `OAuth2UserInfoMapper.parse` 실패 | 현재 구글뿐이라 낮음 |
 
-- **`ddl-auto: update`** (`application.yml:37`) — Hibernate는 컬럼을 **삭제하지 않는다.**
-  `Auth.verified`는 `@Column(nullable = false)`이므로 필드만 지우면 기존 NOT NULL 컬럼이 남아
-  INSERT가 실패한다. 수동 DDL 필수.
-- **`UserOutboxEventListener:35`는 `@TransactionalEventListener(BEFORE_COMMIT)`이다.**
-  이벤트를 트랜잭션 **밖**에서 발행하면 리스너가 아예 실행되지 않는다.
-  → outbox 행 없음 → Neo4j `SocialUser` 노드 없음.
-- **`save()` 전에는 `user.getId()`가 null이다** (`@GeneratedValue`).
-  생성 팩토리 안에서 `registerEvent`를 할 수 없다.
-- `SecurityConfig:48`의 `"/api/auth/verifications"`는 **정확 매칭**이다. 하위 경로는 열리지 않는다.
-- `EmailAdapter:26`은 `@Async`다. 발송 실패가 호출자에게 전파되지 않는다.
-- `EmailAdapter:22` `app.frontend.base-url` + `redirectPage`로 링크를 만든다.
+**첫 번째가 task-90 이전부터 있던 결함이고 가장 흔하다.** 취소는 오류가 아닌데 오류 화면조차
+아닌 JSON 원문을 보게 된다.
 
 ---
 
 ## 구현 방향
 
-### 1. 엔드포인트 재설계
+### **302 리다이렉트**
 
-| Method | Path | Body / Param | 역할 |
-|---|---|---|---|
-| POST | `/api/auth/verifications` | `{email, redirectPage}` | **접수 + 메일 발송.** 계정 존재를 요구하지 않음 |
-| GET | `/api/auth/verifications/{token}` | — | **(신규)** 토큰 유효성 확인. 폼 표시 전 호출 |
-| POST | `/api/auth/users` | `{token, password, nickname}` | **계정 생성 + 쿠키 발급(자동 로그인)** |
-| ~~PATCH~~ | ~~`/api/auth/verifications`~~ | | **삭제** — 역할이 `POST /users`로 흡수 |
+JSON을 반환하지 않는다. **브라우저를 프론트엔드 로그인 페이지로 돌려보낸다.**
 
-**개념 재배치.** "인증메일 발송"과 "이메일 인증"이 독립 개념에서 사라지고,
-"회원가입"이 1단계(이메일 접수)와 2단계(계정 생성)로 쪼개진다.
-"재발송"은 별도 동작이 아니라 `POST /verifications` 재요청과 동일하므로 엔드포인트가 하나 줄어든다.
+이 시점의 요청은 API 호출이 아니다. 사용자는 구글에서 우리 백엔드로 리다이렉트되어 온 상태이고,
+**주소창이 백엔드 도메인에 있으며 응답을 기다리는 JS가 없다.** 여기서 JSON을 내려주면 브라우저가
+그 JSON을 화면에 그대로 그린다. 지금 401 JSON이 보이는 게 정확히 그 상황이다.
 
-**`GET`이 필요한 이유**: 프론트가 폼을 그리기 전에 토큰 생존을 확인해야 한다.
-없으면 사용자가 비밀번호까지 입력해 제출한 뒤에야 만료를 알게 된다.
-
-**`/verifications` 이름을 유지하는 이유**: 이 리소스의 본질은 "이메일 소유 증명 절차"이며
-회원가입 전용이 아니다. 후속 비밀번호 재설정 task에서 `{email, purpose}`로 확장해
-증명은 공용, 소비처만 분기(`POST /users` vs `PATCH /users/me/password`)하는 형태가 된다.
-**단 `purpose` 필드는 이번에 넣지 않는다** — 값이 하나뿐인 enum을 미리 만들지 않는다.
-
-`POST /users` 성공 시 쿠키를 발급해 바로 로그인 상태로 만든다. 소유 증명과 비밀번호 설정을
-방금 마친 사람이므로 안전하고, 2단계로 늘어난 가입 UX를 보상한다.
-
-### 2. pending signup 저장 — Redis, 토큰 단위 키
+그래서 유일한 복귀 수단이 리다이렉트다. 실패 사유는 **쿼리 파라미터 하나**로 함께 넘긴다.
 
 ```
-account:signup:{token} → email      TTL 1시간
+302 Location: http://localhost:3000/login?error=failed
 ```
 
-- **자격증명을 담지 않는다.** C-2의 핵심.
-- **역방향 인덱스(이메일→토큰)를 두지 않는다 = dedup 없음.**
+### 1. `OAuth2AuthenticationFailureHandler` 신설
 
-  > dedup을 걸면 저장량이 고유 이메일 수에 비례해 유리하지만, **공격자가 피해자 이메일로
-  > 반복 접수해 피해자의 유효 토큰을 계속 무효화하는 DoS**가 생긴다. 레코드가 이메일과 토큰뿐이라
-  > 건당 100바이트 남짓이므로 DoS를 피하는 쪽을 택한다.
-  > **총량 방어 수단은 두지 않기로 했다(2026-08-13, 레이트 리밋 폐기).** 즉 저장량 증가는
-  > TTL 1시간에만 의존하며, 이 리스크를 감수한 상태다.
-
-- **TTL 1시간.** 기존 24시간에서 단축한다. 근거 두 가지:
-  1. 만료 비용이 "이메일 한 번 재입력"으로 줄었다 (기존에는 PENDING 계정이 남아 재발송 요청).
-  2. **C-2에서 링크의 민감도는 오히려 올라간다.** 클릭한 사람이 비밀번호를 정하므로 사실상
-     비밀번호 설정 링크다. 메일 전달·공용 PC·메일함 노출 시 제3자가 그 이메일로 계정을
-     선점할 수 있고, **이번 범위에 재설정 플로우가 없으므로 피해자에게 회수 수단이 없다.**
-- **토큰은 1회용.** 계정 생성 성공 시 삭제한다.
-- 기존 `EmailVerificationTokenRedisAdapter`는 `userId` 기반이라 재활용하지 않고 **대체**한다.
-  프리픽스를 `account:email-verification:` → `account:signup:`으로 바꿔 배포 시 구 키와 섞이지 않게 한다.
-
-### 3. 계정 생성과 이벤트 발행 순서
+`OAuth2AuthenticationSuccessHandler`와 같은 패키지에 대칭으로 둔다.
+`SimpleUrlAuthenticationFailureHandler`를 상속해 `onAuthenticationFailure`만 재정의한다.
 
 ```java
-@Transactional
-public AuthTokenResult signup(String token, String password, String nickname) {
-    String email = pendingSignupRepository.findEmailByToken(token)
-            .orElseThrow(InvalidVerificationTokenException::new);
-
-    User user = userRepository.save(User.createActive(email, nickname));  // ① id 확보
-    authRepository.save(Auth.createLocalAuth(user.getId(), hasher.encode(password))); // ②
-    eventPublisher.publishEvent(new UserActivatedEvent(                   // ③ 트랜잭션 안
-            user.getId(), user.getNickname(), user.getProfileImage()));
-    pendingSignupRepository.delete(token);                                // ④ 1회용 보장
-
-    return issueTokens(user);
-}
+String code = resolveCode(exception);            // 화이트리스트
+String target = (code == null)
+        ? frontendBaseUrl + LOGIN_PATH                       // 취소 — 깨끗하게
+        : frontendBaseUrl + LOGIN_PATH + "?error=" + code;   // 그 외
+log.warn("[oauth2] 인증 실패. code={}", code, exception);     // 원문은 로그에만
+getRedirectStrategy().sendRedirect(request, response, target);
 ```
 
-- ①이 먼저인 이유: `save()` 전에는 `getId()`가 null
-- ③이 트랜잭션 **안**이어야 하는 이유: `UserOutboxEventListener:35`가 `BEFORE_COMMIT`이라
-  밖에서 발행하면 실행되지 않는다. outbox 행이 유저 행과 같은 트랜잭션으로 커밋되어야 원자적이다.
-- **이벤트 발행 경로가 하나로 통일된다.** 현재는 `User.activate()`의 `registerEvent`(@DomainEvents)와
-  `SignupService:52`/`DevUserService:45`의 `eventPublisher` 직접 호출이 공존한다.
-  `activate()`가 죽으면서 **직접 호출 하나만 남는다.**
-  (두 갈래였던 것이 커밋 `a244f8d`의 "`save()` 누락 → `@DomainEvents` 미발행" 버그를 낳은 구조다.)
+### 2. `error` 값은 **미리 정해둔 문자열 2개만** 쓴다
 
-### 4. 계정 열거 대응 — 응답은 통일, 메일 내용으로 분기
+예외에서 꺼낸 값을 그대로 URL에 넣지 않는다. Spring이 주는 에러 코드는 상황에 따라
+`invalid_token_response`, `authorization_request_not_found` 등 무엇이든 올 수 있는데,
+**그런 값을 그대로 흘려보내면 프론트가 알 수 없는 값을 받게 되고 백엔드 내부 표현이 URL에 남는다.**
 
-`POST /verifications`는 이메일 등록 여부와 무관하게 **항상 201**을 반환한다.
+그래서 아는 값만 골라 정해진 문자열로 바꾸고, 나머지는 전부 하나로 뭉갠다.
 
-| 상황 | 응답 | 메일 |
+| 실제 상황 | `error` 값 | 프론트 문구 |
 |---|---|---|
-| 미가입 | 201 | 가입 계속하기 링크 |
-| 이미 가입됨 | 201 | "이미 가입된 계정입니다. 로그인하세요" (링크 없음) |
+| 동의 화면에서 취소 (`access_denied`) | **붙이지 않음** — `/login` | 없음. 그냥 로그인 화면 |
+| 이메일 미검증 (`email_not_verified`) | `email_not_verified` | "구글에서 이메일 인증이 완료되지 않은 계정입니다" |
+| **그 외 전부** | `failed` | "로그인에 실패했습니다. 잠시 후 다시 시도해주세요" |
 
-응답만으로는 가입 여부를 알 수 없고, **실제 이메일 주인은 여전히 상황을 안다.** UX 손실이 없다.
-`AlreadyRegisteredEmailException`은 이 경로에서 사라진다.
+구현은 `OAuth2AuthenticationException`이면 `getError().getErrorCode()`를 읽어 위 표에 대조하고,
+표에 없거나 `OAuth2AuthenticationException`이 아니면 `failed`로 떨어뜨린다.
+**실제 사유는 `log.warn`에 예외째로 남기므로 디버깅 정보는 잃지 않는다.**
 
-### 5. 로그인 정규화
+**취소에 파라미터를 붙이지 않는 이유:** 원하는 화면이 "그냥 로그인 폼"이라 프론트가 분기할
+필요가 없다. 코드를 주면 프론트에 "이 코드는 무시" 분기가 하나 생길 뿐이다.
 
-```java
-// 신규: account/domain/exception/InvalidCredentialsException (401)
-// 메시지는 생성자에서 고정 — 호출부가 주입할 수 없게 한다
-User user = userRepository.findByEmail(email)
-        .orElseThrow(InvalidCredentialsException::new);
-Auth localAuth = authRepository.findByUserIdAndProvider(user.getId(), LOCAL)
-        .orElseThrow(InvalidCredentialsException::new);
-if (!passwordHasher.matches(password, localAuth.getPassword())) {
-    throw new InvalidCredentialsException();
-}
-```
+### 3. 예외 원문을 URL에 싣지 않는다
 
-- 실패 사유는 `log.warn`으로만 남긴다.
-- `BadCredentialsException`(Spring Security) 의존 제거 → **계층 위반과 500을 동시에 해소.**
-- `NotVerifiedException` 분기(`:53-55`) 삭제.
+`exception.getMessage()`나 `OAuth2Error.getDescription()`을 쿼리에 붙이면 백엔드 내부 표현이
+URL에 노출되고, 프론트가 그대로 렌더링하면 반사형 XSS 표면이 된다.
+**Task-05·task-90의 "백엔드 원문을 화면에 태우지 않는다"와 같은 원칙이다.**
 
-### 6. OAuth 경로
+화이트리스트라 이론상 안전하지만 `URLEncoder`로 인코딩해 심층 방어를 둔다.
 
-- `registerOAuthUser`에서 `user.isPending()` 분기 제거. PENDING User가 존재하지 않는다.
-- **`email_verified` 클레임 검증.** 구글이 미인증이라고 응답한 이메일로는 기존 계정에 연동하지 않는다.
-  "이메일 문자열 일치만으로 병합하지 않는다"의 실질 구현.
+### 4. 리다이렉트 대상은 `frontendBaseUrl`
 
-### 7. SecurityConfig
+`OAuth2AuthenticationSuccessHandler:24`가 이미 `@Value("${app.frontend.base-url}")`를 쓴다.
+같은 값을 쓰지 않으면 로컬(`localhost:3000`)과 운영이 갈린다.
 
-`"/api/auth/verifications"` 정확 매칭에 **`GET /api/auth/verifications/*`만 좁게** 추가한다.
-`/**`로 넓히면 이후 이 경로 아래 추가되는 엔드포인트가 자동으로 `permitAll`이 된다.
+경로(`/login`)는 **상수 하나로 모아둔다.** 백엔드가 프론트 라우팅을 알고 있는 구조라
+흩어지면 프론트 경로 변경 시 찾기 어려워진다.
 
 ---
 
@@ -180,16 +118,11 @@ if (!passwordHasher.matches(password, localAuth.getPassword())) {
 
 | # | 항목 | 결정 |
 |---|---|---|
-| 1 | 비밀번호 재설정 플로우 | **이번 범위 제외** — 별도 task로 즉시 후속 |
-| 2 | pending 저장소 TTL | **1시간** |
-| 3 | 이메일 기준 dedup | **없음** (토큰 단위 키) |
-| 4 | `Auth.verified` 컬럼 | **DROP** (수동 DDL) |
-| 5 | `UserActivatedEvent` 발행 시점 | **계정 생성 성공 시점**, `save()` 직후, 트랜잭션 안 |
-| 6 | `/verifications` 리소스명 | **유지** (증명 절차의 범용 리소스), `purpose` 필드는 후속 |
-
-> **1번 주의**: 제외해도 기능 후퇴는 아니다(현재도 재설정 기능 없음). 다만 비밀번호를 잊은
-> 사용자의 복구 수단이 계속 없는 상태이고, TTL 1시간 근거에서 언급한 "선점 시 회수 불가"도
-> 재설정이 들어오면 해소된다. **곧바로 다음 task로 이어갈 것.**
+| 1 | 실패 처리 방식 | **302 리다이렉트.** JSON 응답이 아니다 |
+| 2 | 취소(`access_denied`) 처리 | **파라미터 없이 `/login`으로.** 오류가 아니다 |
+| 3 | `error` 값 | **정해둔 2개**(`email_not_verified`, `failed`)만. 예외 값을 그대로 흘리지 않는다 |
+| 4 | 예외 원문 | **URL에 싣지 않는다.** 로그로만 |
+| 5 | 프론트 화면 구현 | **이번 범위 밖.** 프론트 저장소 task로 전달 |
 
 ---
 
@@ -199,99 +132,74 @@ if (!passwordHasher.matches(password, localAuth.getPassword())) {
 
 | 파일 | 내용 |
 |---|---|
-| `account/application/port/out/PendingSignupRepository.java` | `save(token, email)` / `findEmailByToken` / `delete(token)` |
-| `account/adapter/out/persistence/PendingSignupRedisAdapter.java` | 위 포트의 Redis 구현, TTL 1시간 |
-| `account/domain/exception/InvalidCredentialsException.java` | 401, 메시지 생성자 고정 |
-| `account/domain/exception/InvalidVerificationTokenException.java` | 400/404, 만료·위조 토큰 |
-| `account/adapter/in/web/dto/SignupCompleteRequestDto.java` | `{token, password, nickname}` |
-| `account/adapter/in/web/dto/VerificationTokenResponse.java` | `{email}` — GET 응답 |
+| `account/adapter/in/web/OAuth2/OAuth2AuthenticationFailureHandler.java` | 화이트리스트 매핑 + 리다이렉트 |
+| `account/adapter/in/web/OAuth2/OAuth2AuthenticationFailureHandlerTest.java` | 단위 테스트 |
 
 ### 수정
 
 | 파일 | 내용 |
 |---|---|
-| `AccountController` | `POST /users` 시그니처 변경 + 쿠키 발급, `GET /verifications/{token}` 추가, `PATCH /verifications` 삭제 |
-| `SignupUseCase` / `SignupService` | `signup(token, password, nickname)`, `registerOAuthUser`에서 PENDING 분기 제거 |
-| `VerificationUseCase` / `VerificationService` | `sendVerificationEmail` 재작성(계정 불요), `validateToken` 추가, `verifyEmail` 삭제 |
-| `LoginService` | 401 통합, `NotVerifiedException` 분기 삭제, `BadCredentialsException` 제거 |
-| `Auth` | `verified`·`verify()`·`overwritePassword()` 삭제, `createLocalAuth`를 유일 생성 경로로 |
-| `User` | `isPending()`·`overwritePendingProfile()`·`activate()` 삭제, `UserStatus.PENDING` 제거, `createActive()` 추가 |
-| `SecurityConfig:48` | `GET /api/auth/verifications/*` 좁게 추가 |
-| `EmailPort` / `EmailAdapter` | 이미 가입된 계정용 메일 템플릿 추가 |
-| `GoogleOAuth2UserInfo` / `CustomOAuth2UserService` | `email_verified` 검증 |
-| `AuthRepository` / `UserRepository` + JPA + 어댑터 | cleanup 관련 메서드 3종 삭제 |
-| `DevUserService:45` | `User.createActive()` 사용으로 정렬 (동작 동일) |
-
-### 삭제
-
-`AccountCleanupService` · `AccountCleanupScheduler` · `AccountCleanupEventListener` ·
-`AccountCleanupUseCase` · `NotVerifiedException` · `EmailVerificationTokenRepository` ·
-`EmailVerificationTokenRedisAdapter` · 대응 테스트 파일
+| `SecurityConfig:63-68` | `.failureHandler(oauth2FailureHandler)` 배선 |
 
 ---
 
-## 배포 시 사용자가 직접 실행할 작업
+## 프론트엔드에 전달할 계약
 
-에이전트가 대신할 수 없는 항목이다.
+프론트 저장소에서 별도 task로 처리한다. **task-40과 같은 패스에 넣어야 프론트 배포가 한 번으로 끝난다.**
 
-**1. `verified` 컬럼 DROP** — 배포 **전** 실행. 누락 시 모든 회원가입이 실패한다.
-```sql
-ALTER TABLE auths DROP COLUMN verified;
 ```
-`users.status`는 문자열 컬럼이라 `PENDING` enum 값만 빠지면 되므로 DDL 불필요.
-
-**2. 기존 PENDING 데이터 일회성 정리** — `AccountCleanupService`를 제거하므로 자연 소멸을 기대할 수 없다.
-```sql
-DELETE FROM auths WHERE user_id IN (SELECT user_id FROM users WHERE status = 'PENDING');
-DELETE FROM users WHERE status = 'PENDING';
+성공  → {FRONTEND_BASE_URL}/                      (기존과 동일, 쿠키 2개 발급됨)
+취소  → {FRONTEND_BASE_URL}/login                 (쿼리 없음. 에러 문구 띄우지 말 것)
+실패  → {FRONTEND_BASE_URL}/login?error=email_not_verified
+      → {FRONTEND_BASE_URL}/login?error=failed
 ```
-Redis 구 키 `account:email-verification:*`도 함께 정리.
 
-**3. 프론트엔드 2단계 전환** — 이메일 입력 화면, 메일 링크 착지 페이지(폼) 신설,
-`redirectPage` 값 변경, `PATCH /verifications` 호출 제거.
+`error` 값은 이 둘 외에 오지 않는다. 모르는 값이 오면 `failed`와 동일하게 처리하면 된다.
+
+> **경로 `/login`은 프론트 라우팅에 맞춰 조정 가능하다.** 프론트 확인 후 확정한다.
+> 다른 값이어도 백엔드는 상수 하나만 바꾸면 된다.
 
 ---
 
 ## 예상 사이드 이펙트
 
-1. **Neo4j `SocialUser` 동기화 회귀 위험 (최우선)** — 이벤트 발행 시점이 바뀐다.
-   `UserOutboxEventListener:35`가 `BEFORE_COMMIT`이라 트랜잭션 밖 발행 시 조용히 누락된다.
-   증상은 "가입·로그인은 되는데 소셜 그래프에 노드가 없는 계정"이며 **에러가 나지 않아 늦게 발견된다.**
-   통합 테스트로 고정한다.
-2. **`ShedLock`에서 계정 정리 잡이 사라진다.** 스케줄러 등록 목록 확인 필요.
-3. **메일 발송 남용이 쉬워진다.** `POST /verifications`가 계정 존재 검사 없이 발송하게 되어,
-   현재 2회 요청으로 가능하던 남용이 1회로 줄어든다.
-   **레이트 리밋은 폐기했으므로(2026-08-13) 대응 없이 감수한다.** SMTP 쿼터가 소진되면
-   가입 플로우 전체가 멈추고, 발송이 `@Async`라 API는 계속 201을 반환해 탐지가 늦다.
-   증상이 "가입은 되는데 메일이 안 온다"면 SMTP 쿼터부터 의심할 것.
-4. **`AlreadyRegisteredEmailException`** 은 OAuth 경로 등 다른 사용처가 남아 있는지 확인 후 판단.
+1. **기존 401 JSON 응답이 사라진다.** 프론트가 그 응답에 의존하는 코드는 없다(막다른 길이었음).
+   API 클라이언트가 아니라 브라우저 리다이렉트 경로라 CORS 영향도 없다.
+2. **`SimpleUrlAuthenticationFailureHandler`의 세션 처리.** 부모 구현은 실패 예외를 세션에 저장하는
+   경로가 있으나 이 앱은 `SessionCreationPolicy.STATELESS`다. `onAuthenticationFailure`를 완전히
+   재정의하므로 부모 로직을 타지 않는다 — **`super.onAuthenticationFailure`를 호출하지 말 것.**
+3. **`/login?error`가 `permitAll`이 아닌 문제는 그대로 남지만 무해해진다.** 리다이렉트 대상이
+   백엔드가 아니라 프론트 도메인이 되므로 `SecurityConfig`를 타지 않는다.
+   **`permitAll` 목록에 `/login`을 추가하지 말 것** — 불필요하게 백엔드 경로를 여는 것이다.
 
 ---
 
 ## 테스트 전략
 
-`TESTING-GUIDE.md` 기본 프로토콜을 따른다. 아래는 반드시 포함할 케이스다.
+`TESTING-GUIDE.md` 기본 프로토콜을 따른다. 기존 `OAuth2AuthenticationSuccessHandlerTest`가
+같은 형태의 단위 테스트 선례다.
 
-**단위 (Mockito)**
-- `SignupService`: 유효 토큰으로 계정 생성 / 만료·위조 토큰 거부 / **토큰 재사용 거부**
-- `VerificationService`: 미가입·기가입 양쪽 모두 **동일하게 201**
-- `LoginService`: 세 실패 경로가 **모두 같은 예외·같은 메시지**
+**단위 (`OAuth2AuthenticationFailureHandlerTest`)**
+- `access_denied` → `Location`이 `{frontendBaseUrl}/login`이고 **쿼리가 없는지**
+- `email_not_verified` → `Location`에 `?error=email_not_verified`
+- 임의의 다른 `OAuth2AuthenticationException` → `?error=failed`
+- `OAuth2AuthenticationException`이 아닌 `AuthenticationException` → `?error=failed`
+- **`Location`에 예외 메시지·클래스명·`description`이 없는지** (문자열 부재 검증)
+- `frontendBaseUrl`이 적용되는지 (하드코딩된 호스트가 없는지)
 
-**통합 (`BaseControllerTest`)**
-- **회귀 방지 핵심 1** — 접수 → 토큰 A → **다른 자격증명으로 재접수** → 토큰 B →
-  **토큰 A로 계정 생성 시 A 요청자가 정한 비밀번호가 적용되는지.**
-  두 시도가 서로를 오염시키지 않음을 고정한다.
-- **회귀 방지 핵심 2** — 로컬 가입 후 **outbox 행이 생성되는지** (Neo4j sync 경로 보증)
-- 로그인 실패 3경우의 응답 본문이 **바이트 단위로 동일**한지
-- `GET /verifications/{token}`이 `permitAll`인지, 그리고 **그 아래 다른 경로는 열리지 않는지**
+**회귀**
+- 성공 경로가 그대로인지 — `OAuth2AuthenticationSuccessHandlerTest` 통과 유지
+- 전체 테스트 스위트 통과 (현재 550개)
 
-**삭제할 테스트**
-`AccountCleanupEventListenerTest` 등 제거 대상 클래스의 테스트. 삭제 전
-"미인증 Auth 정리" 의도가 다른 테스트에 남아 있지 않은지 확인한다.
+**수동 검증 (배포 후)**
+- 구글 동의 화면에서 **취소** → 프론트 로그인 화면으로 복귀, 에러 문구 없음
+- `email_verified: false`는 실제 재현이 어려우므로 단위 테스트로 갈음한다
 
 ---
 
 ## 승인 대기
 
-위 확정 사항 6개와 변경 파일 목록에 이견이 없으면 승인해 주기 바란다.
-승인 시 `main`에서 `ai/refactor-signup-pre-verification` 브랜치를 생성하고 구현에 들어간다.
+위 확정 사항 5개와 변경 파일 목록에 이견이 없으면 승인해 주기 바란다.
+승인 시 `main`에서 `ai/fix-oauth2-failure-handler` 브랜치를 생성하고 구현에 들어간다.
+
+프론트 경로(`/login`)는 프론트 확인 전이라도 상수로 두고 진행 가능하다 — 확정되면 한 줄 변경이다.

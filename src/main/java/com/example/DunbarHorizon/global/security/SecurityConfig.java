@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.global.security;
 
 import com.example.DunbarHorizon.account.adapter.in.web.OAuth2.CustomOAuth2UserService;
+import com.example.DunbarHorizon.account.adapter.in.web.OAuth2.OAuth2AuthenticationFailureHandler;
 import com.example.DunbarHorizon.account.adapter.in.web.OAuth2.OAuth2AuthenticationSuccessHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +29,7 @@ public class SecurityConfig {
 
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2AuthenticationSuccessHandler oauth2SuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oauth2FailureHandler;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -65,6 +67,7 @@ public class SecurityConfig {
                                 .userService(customOAuth2UserService)
                         )
                         .successHandler(oauth2SuccessHandler)
+                        .failureHandler(oauth2FailureHandler)
                 );
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
