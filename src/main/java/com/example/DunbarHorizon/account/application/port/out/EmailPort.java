@@ -2,7 +2,7 @@ package com.example.DunbarHorizon.account.application.port.out;
 
 public interface EmailPort {
 
-    void sendSignupVerificationEmail(String email, String token, String redirectPage);
+    void sendSignupVerificationEmail(String email, String token);
 
     /**
      * 이미 가입된 이메일로 접수 요청이 왔을 때 보낸다.

@@ -183,14 +183,14 @@ class AccountControllerTest extends BaseControllerTest {
     @Test
     @DisplayName("가입 접수 시 201 Created를 반환한다")
     void requestVerification_Success() throws Exception {
-        VerificationEmailRequestDto request = new VerificationEmailRequestDto("test@test.com", "http://redirect.com");
+        VerificationEmailRequestDto request = new VerificationEmailRequestDto("test@test.com");
 
         mockMvc.perform(post("/api/auth/verifications")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        verify(verificationUseCase).requestVerification(eq("test@test.com"), eq("http://redirect.com"));
+        verify(verificationUseCase).requestVerification(eq("test@test.com"));
     }
 
     @Test

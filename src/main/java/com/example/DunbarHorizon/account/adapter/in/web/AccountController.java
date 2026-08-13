@@ -73,8 +73,7 @@ public class AccountController {
     @PostMapping("/verifications")
     public ResponseEntity<Void> requestVerification(
             @RequestBody @Valid VerificationEmailRequestDto verificationEmailRequestDto) {
-        verificationUseCase.requestVerification(
-                verificationEmailRequestDto.email(), verificationEmailRequestDto.redirectPage());
+        verificationUseCase.requestVerification(verificationEmailRequestDto.email());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 

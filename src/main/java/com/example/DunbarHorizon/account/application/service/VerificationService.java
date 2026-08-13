@@ -20,7 +20,7 @@ public class VerificationService implements VerificationUseCase {
     private final EmailPort emailPort;
 
     @Override
-    public void requestVerification(String email, String redirectPage) {
+    public void requestVerification(String email) {
         if (userRepository.findByEmail(email).isPresent()) {
             emailPort.sendAlreadyRegisteredEmail(email);
             return;
@@ -28,7 +28,7 @@ public class VerificationService implements VerificationUseCase {
 
         String token = UuidUtil.createV7().toString();
         pendingSignupRepository.save(token, email);
-        emailPort.sendSignupVerificationEmail(email, token, redirectPage);
+        emailPort.sendSignupVerificationEmail(email, token);
     }
 
     @Override

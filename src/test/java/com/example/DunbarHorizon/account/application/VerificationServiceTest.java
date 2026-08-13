@@ -42,13 +42,12 @@ class VerificationServiceTest {
         given(userRepository.findByEmail("new@test.com")).willReturn(Optional.empty());
 
         // when
-        verificationService.requestVerification("new@test.com", "redirect-page");
+        verificationService.requestVerification("new@test.com");
 
         // then
         ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
         verify(pendingSignupRepository).save(tokenCaptor.capture(), eq("new@test.com"));
-        verify(emailPort).sendSignupVerificationEmail(
-                eq("new@test.com"), eq(tokenCaptor.getValue()), eq("redirect-page"));
+        verify(emailPort).sendSignupVerificationEmail(eq("new@test.com"), eq(tokenCaptor.getValue()));
         verify(emailPort, never()).sendAlreadyRegisteredEmail(anyString());
     }
 
@@ -60,12 +59,12 @@ class VerificationServiceTest {
                 .willReturn(Optional.of(User.createActive("taken@test.com", "existing")));
 
         // when & then - 호출자에게는 미가입과 구분되지 않아야 한다
-        assertThatCode(() -> verificationService.requestVerification("taken@test.com", "redirect-page"))
+        assertThatCode(() -> verificationService.requestVerification("taken@test.com"))
                 .doesNotThrowAnyException();
 
         verify(emailPort).sendAlreadyRegisteredEmail("taken@test.com");
         verify(pendingSignupRepository, never()).save(any(), any());
-        verify(emailPort, never()).sendSignupVerificationEmail(any(), any(), any());
+        verify(emailPort, never()).sendSignupVerificationEmail(any(), any());
     }
 
     @Test
@@ -78,9 +77,9 @@ class VerificationServiceTest {
 
         // when & then - 어느 쪽도 예외를 던지지 않으므로 응답만으로는 판별할 수 없다.
         //               구분은 수신자만 볼 수 있는 메일 내용으로만 이뤄진다.
-        assertThatCode(() -> verificationService.requestVerification("new@test.com", null))
+        assertThatCode(() -> verificationService.requestVerification("new@test.com"))
                 .doesNotThrowAnyException();
-        assertThatCode(() -> verificationService.requestVerification("taken@test.com", null))
+        assertThatCode(() -> verificationService.requestVerification("taken@test.com"))
                 .doesNotThrowAnyException();
     }
 
@@ -91,8 +90,8 @@ class VerificationServiceTest {
         given(userRepository.findByEmail("new@test.com")).willReturn(Optional.empty());
 
         // when
-        verificationService.requestVerification("new@test.com", null);
-        verificationService.requestVerification("new@test.com", null);
+        verificationService.requestVerification("new@test.com");
+        verificationService.requestVerification("new@test.com");
 
         // then
         ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
