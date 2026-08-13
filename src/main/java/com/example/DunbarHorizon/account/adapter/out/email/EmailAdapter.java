@@ -54,10 +54,6 @@ public class EmailAdapter implements EmailPort {
         }
     }
 
-    /**
-     * origin과 토큰만으로 조립한다. 착지 경로를 클라이언트에게 받지 않으므로 이 링크가
-     * 우리 도메인 밖을 가리킬 방법이 없고, 프론트 라우트가 바뀌어도 백엔드를 배포하지 않는다.
-     */
     private String buildVerificationLink(String token) {
         String origin = defaultFrontendUrl.endsWith("/")
                 ? defaultFrontendUrl.substring(0, defaultFrontendUrl.length() - 1)
