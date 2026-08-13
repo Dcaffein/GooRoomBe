@@ -29,10 +29,6 @@ public class SignupService implements SignupUseCase {
     private final LoginUseCase loginUseCase;
     private final ApplicationEventPublisher eventPublisher;
 
-    /**
-     * 인증 링크를 클릭해 이메일 소유를 증명한 사람이 자격증명을 정하는 지점이다.
-     * 이 메서드에 도달하기 전까지 {@code users}/{@code auths}에는 아무 행도 없다.
-     */
     @Override
     public AuthTokenResult signup(String token, String password, String nickname) {
         // 조회와 삭제가 한 연산(GETDEL)이라 동시 요청이 같은 토큰으로 두 번 계정을 만들 수 없다.
@@ -70,9 +66,14 @@ public class SignupService implements SignupUseCase {
     }
 
     /**
-     * {@code UserOutboxEventListener}가 {@code BEFORE_COMMIT} 리스너다. 트랜잭션 밖에서 발행하면
-     * 리스너가 아예 실행되지 않아 outbox 행이 생기지 않고, Neo4j {@code SocialUser} 노드도
-     * 만들어지지 않는다. 가입은 성공하고 소셜 그래프만 비는 형태라 에러 없이 조용히 깨진다.
+     * 이 호출은 반드시 트랜잭션 안에서 이뤄져야 한다.
+     *
+     * <p>{@code UserOutboxEventListener}가 {@code @TransactionalEventListener(BEFORE_COMMIT)}라
+     * 활성 트랜잭션이 없으면 리스너를 예외 없이 건너뛴다. outbox 행이 생기지 않으니 Neo4j
+     * {@code SocialUser} 노드도 만들어지지 않는데, 가입도 로그인도 정상이라 아무도 알아채지 못한다.
+     *
+     * <p>클래스 레벨 {@code @Transactional}을 떼거나, 이 호출을 트랜잭션 없는 호출자로 옮기거나,
+     * {@code signup()}을 self-invocation으로 부르면 조건이 깨진다.
      */
     private void publishActivated(User user) {
         eventPublisher.publishEvent(

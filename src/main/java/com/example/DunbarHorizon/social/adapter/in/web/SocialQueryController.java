@@ -74,9 +74,6 @@ public class SocialQueryController {
         return ResponseEntity.ok(networkQueryUseCase.getNetworkContactsOfTwoHop(currentUserId, targetId, skeletonIds));
     }
 
-    /**
-     * 추천 유저 앵커 확장
-     */
     @GetMapping("/recommendations")
     public ResponseEntity<List<AnchorExpansionResult>> getTwoHopRecommendation(
             @CurrentUserId Long currentUserId,

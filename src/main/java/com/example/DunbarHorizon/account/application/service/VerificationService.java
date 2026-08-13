@@ -19,10 +19,6 @@ public class VerificationService implements VerificationUseCase {
     private final PendingSignupRepository pendingSignupRepository;
     private final EmailPort emailPort;
 
-    /**
-     * 가입 접수. 호출자는 이메일 등록 여부를 알 수 없다 — 어느 경우든 예외 없이 끝난다.
-     * 구분은 오직 발송되는 메일 내용으로만 이뤄지므로, 상황을 아는 사람은 이메일 주인뿐이다.
-     */
     @Override
     public void requestVerification(String email, String redirectPage) {
         if (userRepository.findByEmail(email).isPresent()) {

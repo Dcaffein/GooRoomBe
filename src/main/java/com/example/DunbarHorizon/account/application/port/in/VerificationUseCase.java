@@ -7,8 +7,5 @@ public interface VerificationUseCase {
      */
     void requestVerification(String email, String redirectPage);
 
-    /**
-     * 토큰을 소비하지 않고 대상 이메일만 돌려준다. 자격증명 입력 폼을 그리기 전 유효성 확인용.
-     */
     String resolveEmail(String token);
 }

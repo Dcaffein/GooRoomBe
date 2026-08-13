@@ -116,19 +116,22 @@ PATCH  /api/auth/tokens                   # refresh tokens
 ### Social Network (`/api/v1/networks`)
 ```
 GET /api/v1/networks/me?circleSize=DUNBAR
-    → List<NetworkFriendEdgeResult>  # default intimacy network (Soft Morphing)
+    → List<NodeGraphResult>          # default intimacy network (Soft Morphing)
 
-GET /api/v1/networks/labels/{labelName}?circleSize=KINSHIP
-    → List<NetworkFriendEdgeResult>  # label-filtered network
+GET /api/v1/networks/labels/{labelId}
+    → List<NodeGraphResult>          # label-filtered network (최대 150명)
 
-GET /api/v1/networks/mutual/one-hop?targetId=..&currentSkeletonIds=[..]
+GET /api/v1/networks/mutual/one-hop?targetId=..&skeletonIds=..
     → List<MutualFriendEdgeResult>   # drag-and-drop friend addition
 
-GET /api/v1/networks/mutual/two-hop?targetId=..&circleSize=DUNBAR
-    → List<NetworkOneHopsByTwoHopResult>  # 2-hop recommendations
+GET /api/v1/networks/mutual/two-hop?targetId=..&skeletonIds=..
+    → List<Long>                     # 2-hop 유저와 기존 네트워크의 접점 ID
 
 GET /api/v1/networks/recommendations?anchorId=..
     → List<AnchorExpansionResult>    # anchor expansion suggestions
+
+GET /api/v1/networks/path?targetId=..
+    → ConnectionPathResult           # 유저 간 연결 중개인 탐색
 ```
 
 ### Friendships (`/api/v1/friends`)

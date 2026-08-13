@@ -34,10 +34,6 @@ public class AccountController {
     private final ProfileImageStoragePort profileImageStoragePort;
     private final AuthCookieManager authCookieManager;
 
-    /**
-     * 회원가입 완료. 이메일 소유 증명을 마친 토큰을 들고 와야 하며, 이 지점에서 처음으로
-     * 계정 행이 만들어진다. 증명과 비밀번호 설정을 방금 마친 사람이므로 곧바로 로그인시킨다.
-     */
     @PostMapping("/users")
     public ResponseEntity<Void> signup(@RequestBody @Valid SignupRequestDto dto,
                                        HttpServletResponse response) {
@@ -74,10 +70,6 @@ public class AccountController {
         return ResponseEntity.ok().build();
     }
 
-    /**
-     * 가입 접수(1단계). 재요청하면 그것이 곧 재발송이다.
-     * 이미 가입된 이메일이어도 같은 201을 돌려준다 — 구분은 발송되는 메일 내용으로만 한다.
-     */
     @PostMapping("/verifications")
     public ResponseEntity<Void> requestVerification(
             @RequestBody @Valid VerificationEmailRequestDto verificationEmailRequestDto) {
