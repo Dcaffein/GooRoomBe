@@ -27,7 +27,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 작업 파이프라인 | `harness/WORKFLOW.md` | 모든 작업 시작 전 — 계획(PLAN.md) 작성 → 승인 → 브랜치 → 구현 → 커밋 순서 준수 |
 | 아키텍처 & 코딩 컨벤션 | `harness/ARCHITECTURE.md` | 새 파일·기능 추가 시 — 계층 분리, DDD/Hexagonal 규칙, 도메인 간 통신 방식 |
 | 테스트 프로토콜 | `harness/TESTING-GUIDE.md` | 테스트 코드 작성 시 — Base 클래스 상속, Given-When-Then 형식, Edge Case 검증 |
-| 인증 설계 | `harness/AUTHENTICATION.md` | 회원가입·로그인·토큰 관련 작업 시 — 사전 인증 플로우, 응답 규약, 깨면 안 되는 불변식 |
 
 **작업 규칙 요약**
 - `PLAN.md`는 프로젝트 루트(`/`)에 생성한다.
@@ -81,8 +80,6 @@ Local defaults:
 
 ### Authentication
 
-See `harness/AUTHENTICATION.md` for the full design and the invariants that must not be broken.
-
 - **핵심 원칙:** 증명되기 전에는 신원 키가 아니다. 이메일 소유가 증명된 뒤에만 계정이 생성되므로
   `Auth.verified` 같은 플래그가 존재하지 않고, 로컬과 OAuth가 단일 모델이다.
 - **JWT (email/password):** Tokens stored as HTTP-only cookies (`access_token`, `refresh_token`). HMAC-SHA512. Refresh token default TTL: 7 days (604800s).
@@ -114,7 +111,7 @@ PATCH  /api/auth/tokens                   # refresh tokens
 ```
 
 > 로컬 가입은 **사전 인증** 방식이다. 이메일 소유가 증명되기 전에는 `users`/`auths`에
-> 행이 생기지 않으며, 비밀번호는 링크 클릭 후에 입력받는다. 상세는 `harness/AUTHENTICATION.md`.
+> 행이 생기지 않으며, 비밀번호는 링크 클릭 후에 입력받는다.
 
 ### Social Network (`/api/v1/networks`)
 ```
