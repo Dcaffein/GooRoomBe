@@ -3,6 +3,7 @@ package com.example.DunbarHorizon.account.domain;
 import com.example.DunbarHorizon.global.event.user.UserDeactivatedEvent;
 import com.example.DunbarHorizon.global.event.user.UserProfileUpdatedEvent;
 import com.example.DunbarHorizon.account.domain.event.UserDeletedEvent;
+import com.example.DunbarHorizon.account.domain.policy.EmailPolicy;
 import com.example.DunbarHorizon.account.domain.policy.NicknamePolicy;
 import java.time.LocalDateTime;
 import com.example.DunbarHorizon.global.common.BaseTimeAggregateRoot;
@@ -58,7 +59,7 @@ public class User extends BaseTimeAggregateRoot {
      */
     public static User createActive(String email, String nickname) {
         return User.builder()
-                .email(email)
+                .email(EmailPolicy.normalize(email))
                 .nickname(NicknamePolicy.normalize(nickname))
                 .status(UserStatus.ACTIVE)
                 .build();

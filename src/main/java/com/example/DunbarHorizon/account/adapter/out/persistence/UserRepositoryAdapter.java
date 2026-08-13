@@ -3,6 +3,7 @@ package com.example.DunbarHorizon.account.adapter.out.persistence;
 import com.example.DunbarHorizon.account.adapter.out.persistence.jpa.UserJpaRepository;
 import com.example.DunbarHorizon.account.domain.User;
 import com.example.DunbarHorizon.account.domain.UserStatus;
+import com.example.DunbarHorizon.account.domain.policy.EmailPolicy;
 import com.example.DunbarHorizon.account.domain.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -18,9 +19,14 @@ public class UserRepositoryAdapter implements UserRepository {
 
     private final UserJpaRepository userJpaRepository;
 
+    /**
+     * 조회 전에 정규화한다. 이 어댑터가 포트의 유일한 구현이라 모든 이메일 조회가 여기를
+     * 지나므로, 호출자마다 정규화를 반복하지 않아도 쓰기(@code User.createActive})와
+     * 같은 기준으로 맞춰진다.
+     */
     @Override
     public Optional<User> findByEmail(String email) {
-        return userJpaRepository.findByEmail(email);
+        return userJpaRepository.findByEmail(EmailPolicy.normalize(email));
     }
 
     @Override
