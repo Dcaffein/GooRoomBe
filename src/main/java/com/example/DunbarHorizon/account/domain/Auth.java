@@ -44,11 +44,6 @@ public class Auth extends BaseTimeAggregateRoot {
         this.providerId = providerId;
     }
 
-    /**
-     * Auth 행의 존재가 곧 이메일 소유 증명이다. 로컬은 인증 메일이, OAuth는 공급자가 증명하며
-     * 증명 전에는 행이 만들어지지 않는다. 그래서 {@code verified} 플래그가 존재하지 않고,
-     * 기존 행의 비밀번호를 덮어쓰는 경로도 두지 않는다.
-     */
     public static Auth createLocalAuth(Long userId, HashedPassword password) {
         return Auth.builder()
                 .userId(userId)

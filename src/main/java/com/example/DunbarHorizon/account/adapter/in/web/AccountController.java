@@ -38,7 +38,7 @@ public class AccountController {
     public ResponseEntity<Void> signup(@RequestBody @Valid SignupRequestDto dto,
                                        HttpServletResponse response) {
         AuthTokenResult jwts = signupUseCase.signup(dto.token(), dto.password(), dto.nickname());
-        handleTokenResponse(response, jwts);
+        addTokenResponse(response, jwts);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -46,7 +46,7 @@ public class AccountController {
     public ResponseEntity<Void> login(@RequestBody @Valid LoginRequestDto loginRequestDto,
                                       HttpServletResponse response) {
         AuthTokenResult jwts = loginUseCase.login(loginRequestDto.email(), loginRequestDto.password());
-        handleTokenResponse(response, jwts);
+        addTokenResponse(response, jwts);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -66,7 +66,7 @@ public class AccountController {
             @CookieValue(name = "refresh_token", required = false) String refreshToken,
             HttpServletResponse response) {
         AuthTokenResult newJwts = loginUseCase.reissue(refreshToken);
-        handleTokenResponse(response, newJwts);
+        addTokenResponse(response, newJwts);
         return ResponseEntity.ok().build();
     }
 
@@ -101,7 +101,7 @@ public class AccountController {
         return ResponseEntity.ok().build();
     }
 
-    private void handleTokenResponse(HttpServletResponse response, AuthTokenResult tokens) {
+    private void addTokenResponse(HttpServletResponse response, AuthTokenResult tokens) {
         authCookieManager.addAccessTokenCookie(response, tokens.accessToken());
         authCookieManager.addRefreshTokenCookie(response, tokens.refreshToken());
     }

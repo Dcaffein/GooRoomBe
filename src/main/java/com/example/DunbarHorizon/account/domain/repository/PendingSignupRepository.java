@@ -10,7 +10,7 @@ import java.util.Optional;
  *
  * <p>이메일 기준 dedup을 하지 않는다. 같은 이메일로 여러 번 접수하면 토큰이 각각 생성된다.
  * 기존 토큰을 무효화하면 공격자가 피해자 이메일로 반복 접수해 피해자의 링크를 계속
- * 죽이는 서비스 거부가 성립하기 때문이다.
+ * 죽이는 서비스 거부가 성립하기 때문이다
  */
 public interface PendingSignupRepository {
 
