@@ -27,7 +27,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 작업 파이프라인 | `harness/WORKFLOW.md` | 모든 작업 시작 전 — 계획(PLAN.md) 작성 → 승인 → 브랜치 → 구현 → 커밋 순서 준수 |
 | 아키텍처 & 코딩 컨벤션 | `harness/ARCHITECTURE.md` | 새 파일·기능 추가 시 — 계층 분리, DDD/Hexagonal 규칙, 도메인 간 통신 방식 |
 | 테스트 프로토콜 | `harness/TESTING-GUIDE.md` | 테스트 코드 작성 시 — Base 클래스 상속, Given-When-Then 형식, Edge Case 검증 |
-| Account 불변식·흐름 | `harness/ACCOUNT-INVARIANTS.md` | `account` 도메인 또는 `global/security` 수정 전 — 깨뜨리면 조용히 망가지는 제약 10개, 가입·로그인 전체 흐름, 응답 계약 |
 
 **작업 규칙 요약**
 - `PLAN.md`는 프로젝트 루트(`/`)에 생성한다.
