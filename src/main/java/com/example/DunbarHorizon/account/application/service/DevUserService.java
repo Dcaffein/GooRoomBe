@@ -33,7 +33,7 @@ public class DevUserService {
 
         User user = userRepository.save(User.createActive(email, nickname));
 
-        Auth auth = Auth.createLocalAuth(user.getId(), DEFAULT_PASSWORD, passwordHasher);
+        Auth auth = Auth.createLocalAuth(user.getId(), passwordHasher.hash(DEFAULT_PASSWORD));
         authRepository.save(auth);
 
         eventPublisher.publishEvent(new UserActivatedEvent(user.getId(), user.getNickname(), user.getProfileImage()));

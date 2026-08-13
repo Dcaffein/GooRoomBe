@@ -42,7 +42,7 @@ public class SignupService implements SignupUseCase {
 
         // save()가 끝나야 id가 생긴다. 이벤트 발행이 그 뒤여야 하는 이유다.
         User user = userRepository.save(User.createActive(email, nickname));
-        authRepository.save(Auth.createLocalAuth(user.getId(), password, passwordHasher));
+        authRepository.save(Auth.createLocalAuth(user.getId(), passwordHasher.hash(password)));
 
         publishActivated(user);
 
@@ -65,16 +65,6 @@ public class SignupService implements SignupUseCase {
         return user;
     }
 
-    /**
-     * 이 호출은 반드시 트랜잭션 안에서 이뤄져야 한다.
-     *
-     * <p>{@code UserOutboxEventListener}가 {@code @TransactionalEventListener(BEFORE_COMMIT)}라
-     * 활성 트랜잭션이 없으면 리스너를 예외 없이 건너뛴다. outbox 행이 생기지 않으니 Neo4j
-     * {@code SocialUser} 노드도 만들어지지 않는데, 가입도 로그인도 정상이라 아무도 알아채지 못한다.
-     *
-     * <p>클래스 레벨 {@code @Transactional}을 떼거나, 이 호출을 트랜잭션 없는 호출자로 옮기거나,
-     * {@code signup()}을 self-invocation으로 부르면 조건이 깨진다.
-     */
     private void publishActivated(User user) {
         eventPublisher.publishEvent(
                 new UserActivatedEvent(user.getId(), user.getNickname(), user.getProfileImage()));

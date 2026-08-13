@@ -4,6 +4,7 @@ import com.example.DunbarHorizon.account.application.port.in.LoginUseCase;
 import com.example.DunbarHorizon.account.application.port.out.PasswordHasher;
 import com.example.DunbarHorizon.account.application.service.SignupService;
 import com.example.DunbarHorizon.account.domain.Auth;
+import com.example.DunbarHorizon.account.domain.HashedPassword;
 import com.example.DunbarHorizon.account.domain.AuthProvider;
 import com.example.DunbarHorizon.account.domain.User;
 import com.example.DunbarHorizon.account.domain.UserStatus;
@@ -61,7 +62,7 @@ class SignupServiceTest {
                 .willReturn(Optional.of("test@test.com"));
         given(userRepository.findByEmail("test@test.com")).willReturn(Optional.empty());
         givenUserIsAssignedId(1L);
-        given(passwordHasher.encode("Pw12345!")).willReturn("encoded-pw");
+        given(passwordHasher.hash("Pw12345!")).willReturn(new HashedPassword("encoded-pw"));
 
         // when
         signupService.signup("valid-token", "Pw12345!", "tester");
@@ -84,7 +85,7 @@ class SignupServiceTest {
                 .willReturn(Optional.of("test@test.com"));
         given(userRepository.findByEmail("test@test.com")).willReturn(Optional.empty());
         givenUserIsAssignedId(42L);
-        given(passwordHasher.encode(any())).willReturn("encoded-pw");
+        given(passwordHasher.hash(any())).willReturn(new HashedPassword("encoded-pw"));
 
         // when
         signupService.signup("valid-token", "Pw12345!", "tester");
@@ -119,7 +120,7 @@ class SignupServiceTest {
                 .willReturn(Optional.empty());
         given(userRepository.findByEmail("test@test.com")).willReturn(Optional.empty());
         givenUserIsAssignedId(1L);
-        given(passwordHasher.encode(any())).willReturn("encoded-pw");
+        given(passwordHasher.hash(any())).willReturn(new HashedPassword("encoded-pw"));
 
         // when
         signupService.signup("one-shot", "Pw12345!", "tester");
@@ -156,7 +157,7 @@ class SignupServiceTest {
                 .willReturn(Optional.of("victim@test.com"));
         given(userRepository.findByEmail("victim@test.com")).willReturn(Optional.empty());
         givenUserIsAssignedId(1L);
-        given(passwordHasher.encode("victimPw!1")).willReturn("encoded-victim-pw");
+        given(passwordHasher.hash("victimPw!1")).willReturn(new HashedPassword("encoded-victim-pw"));
 
         // when - A 토큰의 요청자가 정한 비밀번호로 가입한다
         signupService.signup("token-A", "victimPw!1", "victim");
@@ -164,7 +165,7 @@ class SignupServiceTest {
         // then - 저장된 자격증명은 A 요청자의 것이어야 한다
         ArgumentCaptor<Auth> authCaptor = ArgumentCaptor.forClass(Auth.class);
         verify(authRepository).save(authCaptor.capture());
-        assertThat(authCaptor.getValue().getPassword()).isEqualTo("encoded-victim-pw");
+        assertThat(authCaptor.getValue().hashedPassword()).isEqualTo(new HashedPassword("encoded-victim-pw"));
         assertThat(authCaptor.getValue().getProvider()).isEqualTo(AuthProvider.LOCAL);
 
         // 덮어쓰기 경로가 아예 없으므로 다른 토큰의 요청은 별개 계정 생성 시도가 된다
