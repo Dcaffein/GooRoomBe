@@ -3,7 +3,6 @@ package com.example.DunbarHorizon.account.domain.repository;
 import com.example.DunbarHorizon.account.domain.Auth;
 import com.example.DunbarHorizon.account.domain.AuthProvider;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface AuthRepository {
@@ -12,8 +11,4 @@ public interface AuthRepository {
     boolean existsByUserIdAndProviderAndProviderId(Long userId, AuthProvider provider, String providerId);
 
     void deleteAllByUserId(Long userId);
-
-    void deleteUnverifiedByUserId(Long userId);
-
-    int deleteOldUnverifiedAuths(LocalDateTime threshold);
 }

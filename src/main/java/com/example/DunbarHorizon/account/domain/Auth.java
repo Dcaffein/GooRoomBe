@@ -1,6 +1,5 @@
 package com.example.DunbarHorizon.account.domain;
 
-import com.example.DunbarHorizon.account.domain.exception.AlreadyRegisteredEmailException;
 import com.example.DunbarHorizon.global.common.BaseTimeAggregateRoot;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -31,59 +30,32 @@ public class Auth extends BaseTimeAggregateRoot {
 
     private String providerId;
 
-    @Column(nullable = false)
-    private boolean verified;
-
     @Builder
-    private Auth(Long userId, AuthProvider provider, String password, String providerId, boolean verified) {
+    private Auth(Long userId, AuthProvider provider, String password, String providerId) {
         this.userId = userId;
         this.provider = provider;
         this.password = password;
         this.providerId = providerId;
-        this.verified = verified;
     }
 
-    public void overwritePassword(String encodedPassword, String email) {
-        if (this.verified) {
-            throw new AlreadyRegisteredEmailException(email);
-        }
-        if (this.provider == AuthProvider.LOCAL) {
-            this.password = encodedPassword;
-        }
-    }
-
+    /**
+     * Auth 행의 존재가 곧 이메일 소유 증명이다. 로컬은 인증 메일이, OAuth는 공급자가 증명하며
+     * 증명 전에는 행이 만들어지지 않는다. 그래서 {@code verified} 플래그가 존재하지 않고,
+     * 기존 행의 비밀번호를 덮어쓰는 경로도 두지 않는다.
+     */
     public static Auth createLocalAuth(Long userId, String encodedPassword) {
         return Auth.builder()
                 .userId(userId)
                 .provider(AuthProvider.LOCAL)
                 .password(encodedPassword)
-                .verified(false)
                 .build();
     }
-
-    public static Auth createVerifiedLocalAuth(Long userId, String encodedPassword) {
-        return Auth.builder()
-                .userId(userId)
-                .provider(AuthProvider.LOCAL)
-                .password(encodedPassword)
-                .verified(true)
-                .build();
-    }
-
 
     public static Auth createOAuth(Long userId, AuthProvider provider, String providerId) {
-        Auth auth = Auth.builder()
+        return Auth.builder()
                 .userId(userId)
                 .provider(provider)
                 .providerId(providerId)
-                .verified(false)
                 .build();
-
-        auth.verify();
-        return auth;
-    }
-
-    public void verify() {
-        this.verified = true;
     }
 }

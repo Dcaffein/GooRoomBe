@@ -20,7 +20,4 @@ public interface UserJpaRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByIdAndStatus(Long id, UserStatus status);
 
-    @Modifying(clearAutomatically = true)
-    @Query("DELETE FROM User u WHERE u.status = 'PENDING' AND u.createdAt < :threshold")
-    int deleteOldPendingUsers(@Param("threshold") LocalDateTime threshold);
 }

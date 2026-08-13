@@ -273,7 +273,7 @@ EntryPoint의 값은 하드코딩 문자열이라, 도메인 예외를 `account`
 ## Out of Scope
 
 - `LoginService.login()`의 응답 정규화 및 계정 열거 대응 → **task-90**
-- 인증 엔드포인트 레이트 리밋 → **task-91**
+- 인증 엔드포인트 레이트 리밋 → **폐기 (2026-08-13)**
 - access token 무효화 수단(로그아웃 후에도 만료까지 유효) — 별도 논의
 - `refresh_tokens` 테이블 만료 행 정리 스케줄러 부재 — 별도 논의
 - **`BusinessException`에 명시적 에러 코드 필드 도입** — 현재 `error` 값이

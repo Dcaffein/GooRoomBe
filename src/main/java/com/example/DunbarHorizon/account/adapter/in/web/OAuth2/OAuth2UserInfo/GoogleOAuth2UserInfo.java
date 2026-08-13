@@ -25,6 +25,11 @@ public class GoogleOAuth2UserInfo implements OAuth2UserInfo {
         return (String) attributes.get("email");
     }
 
+    @Override
+    public boolean isEmailVerified() {
+        return Boolean.TRUE.equals(attributes.get("email_verified"));
+    }
+
 
     @Override
     public Map<String, Object> getAttributes() {

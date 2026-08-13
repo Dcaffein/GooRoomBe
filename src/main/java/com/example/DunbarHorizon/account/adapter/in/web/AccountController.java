@@ -10,6 +10,7 @@ import com.example.DunbarHorizon.account.adapter.in.web.dto.LogoutRequest;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.SignupRequestDto;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.UserProfileUpdateRequest;
 import com.example.DunbarHorizon.account.adapter.in.web.dto.VerificationEmailRequestDto;
+import com.example.DunbarHorizon.account.adapter.in.web.dto.VerificationTokenResponse;
 import com.example.DunbarHorizon.account.application.port.out.ProfileImageStoragePort;
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
 import com.example.DunbarHorizon.global.imageStorage.PresignedUploadResult;
@@ -34,8 +35,10 @@ public class AccountController {
     private final AuthCookieManager authCookieManager;
 
     @PostMapping("/users")
-    public ResponseEntity<Void> signup(@RequestBody @Valid SignupRequestDto dto) {
-        signupUseCase.signup(dto.email(), dto.password(), dto.nickname());
+    public ResponseEntity<Void> signup(@RequestBody @Valid SignupRequestDto dto,
+                                       HttpServletResponse response) {
+        AuthTokenResult jwts = signupUseCase.signup(dto.token(), dto.password(), dto.nickname());
+        handleTokenResponse(response, jwts);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -68,16 +71,20 @@ public class AccountController {
     }
 
     @PostMapping("/verifications")
-    public ResponseEntity<Void> sendVerificationEmail(
+    public ResponseEntity<Void> requestVerification(
             @RequestBody @Valid VerificationEmailRequestDto verificationEmailRequestDto) {
-        verificationUseCase.sendVerificationEmail(verificationEmailRequestDto.email(), verificationEmailRequestDto.redirectPage());
+        verificationUseCase.requestVerification(
+                verificationEmailRequestDto.email(), verificationEmailRequestDto.redirectPage());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @PatchMapping("/verifications")
-    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
-        verificationUseCase.verifyEmail(token);
-        return ResponseEntity.ok().build();
+    /**
+     * 토큰 유효성 확인. 프론트가 비밀번호 입력 폼을 그리기 전에 호출한다.
+     * 없으면 사용자가 폼을 다 채워 제출한 뒤에야 만료를 알게 된다.
+     */
+    @GetMapping("/verifications/{token}")
+    public ResponseEntity<VerificationTokenResponse> resolveVerification(@PathVariable String token) {
+        return ResponseEntity.ok(new VerificationTokenResponse(verificationUseCase.resolveEmail(token)));
     }
 
     @PostMapping("/users/me/profile-image/presign")

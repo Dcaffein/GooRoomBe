@@ -28,19 +28,19 @@ class UserJpaRepositoryTest {
                 .nickname("active")
                 .status(UserStatus.ACTIVE)
                 .build();
-        User unverifiedUser = User.builder()
-                .email("unverified@test.com")
-                .nickname("unverified")
-                .status(UserStatus.PENDING)
+        User dormantUser = User.builder()
+                .email("dormant@test.com")
+                .nickname("dormant")
+                .status(UserStatus.DORMANT)
                 .build();
 
         em.persist(activeUser);
-        em.persist(unverifiedUser);
+        em.persist(dormantUser);
         em.flush();
 
         // when
         Optional<User> result = userJpaRepository.findByIdAndStatus(activeUser.getId(), UserStatus.ACTIVE);
-        Optional<User> resultFalse = userJpaRepository.findByIdAndStatus(unverifiedUser.getId(), UserStatus.ACTIVE);
+        Optional<User> resultFalse = userJpaRepository.findByIdAndStatus(dormantUser.getId(), UserStatus.ACTIVE);
 
         // then
         assertThat(result).isPresent();

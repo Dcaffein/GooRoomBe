@@ -80,9 +80,12 @@ Local defaults:
 
 ### Authentication
 
+- **핵심 원칙:** 증명되기 전에는 신원 키가 아니다. 이메일 소유가 증명된 뒤에만 계정이 생성되므로
+  `Auth.verified` 같은 플래그가 존재하지 않고, 로컬과 OAuth가 단일 모델이다.
 - **JWT (email/password):** Tokens stored as HTTP-only cookies (`access_token`, `refresh_token`). HMAC-SHA512. Refresh token default TTL: 7 days (604800s).
-- **OAuth2 (Google):** `CustomOAuth2UserService` → `OAuth2AuthenticationSuccessHandler` issues JWT cookies.
-- Public endpoints: `POST /api/auth/users`, `POST /api/auth/tokens`, `PATCH/DELETE /api/auth/tokens`, `POST /api/auth/verifications`, `/oauth2/**`, `/login/oauth2/**`
+- **OAuth2 (Google):** `CustomOAuth2UserService`(공급자 `email_verified` 검증) → `OAuth2AuthenticationSuccessHandler` issues JWT cookies.
+- **로그인 실패는 세 경우 모두 동일한 401 + 동일 본문**(계정 열거 차단). 사유는 로그로만 남긴다.
+- Public endpoints: `POST /api/auth/users`, `POST /api/auth/tokens`, `PATCH/DELETE /api/auth/tokens`, `POST /api/auth/verifications`, `GET /api/auth/verifications/*`, `/oauth2/**`, `/login/oauth2/**`
 - All other endpoints require authentication.
 - Roles: `ROLE_USER`, `ROLE_ADMIN`.
 - `@CurrentUserId` — custom parameter annotation resolving authenticated user's ID from JWT in controllers.
@@ -99,30 +102,36 @@ Local defaults:
 
 ### Account (`/api/auth/`)
 ```
-POST   /api/auth/users                    # signup
+POST   /api/auth/verifications            # 가입 접수 + 메일 발송 (재요청 = 재발송)
+GET    /api/auth/verifications/{token}    # 토큰 유효성 확인 → { email }
+POST   /api/auth/users                    # 가입 완료: {token, password, nickname} → 계정 생성 + 쿠키
 POST   /api/auth/tokens                   # login → JWT cookies
 DELETE /api/auth/tokens                   # logout
 PATCH  /api/auth/tokens                   # refresh tokens
-POST   /api/auth/verifications            # send verification email
-PATCH  /api/auth/verifications?token=...  # verify email
 ```
+
+> 로컬 가입은 **사전 인증** 방식이다. 이메일 소유가 증명되기 전에는 `users`/`auths`에
+> 행이 생기지 않으며, 비밀번호는 링크 클릭 후에 입력받는다.
 
 ### Social Network (`/api/v1/networks`)
 ```
 GET /api/v1/networks/me?circleSize=DUNBAR
-    → List<NetworkFriendEdgeResult>  # default intimacy network (Soft Morphing)
+    → List<NodeGraphResult>          # default intimacy network (Soft Morphing)
 
-GET /api/v1/networks/labels/{labelName}?circleSize=KINSHIP
-    → List<NetworkFriendEdgeResult>  # label-filtered network
+GET /api/v1/networks/labels/{labelId}
+    → List<NodeGraphResult>          # label-filtered network (최대 150명)
 
-GET /api/v1/networks/mutual/one-hop?targetId=..&currentSkeletonIds=[..]
+GET /api/v1/networks/mutual/one-hop?targetId=..&skeletonIds=..
     → List<MutualFriendEdgeResult>   # drag-and-drop friend addition
 
-GET /api/v1/networks/mutual/two-hop?targetId=..&circleSize=DUNBAR
-    → List<NetworkOneHopsByTwoHopResult>  # 2-hop recommendations
+GET /api/v1/networks/mutual/two-hop?targetId=..&skeletonIds=..
+    → List<Long>                     # 2-hop 유저와 기존 네트워크의 접점 ID
 
 GET /api/v1/networks/recommendations?anchorId=..
     → List<AnchorExpansionResult>    # anchor expansion suggestions
+
+GET /api/v1/networks/path?targetId=..
+    → ConnectionPathResult           # 유저 간 연결 중개인 탐색
 ```
 
 ### Friendships (`/api/v1/friends`)

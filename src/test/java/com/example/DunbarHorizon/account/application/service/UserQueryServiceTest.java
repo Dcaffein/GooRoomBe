@@ -46,10 +46,10 @@ class UserQueryServiceTest {
     }
 
     @Test
-    @DisplayName("PENDING 유저는 이메일로 조회되지 않는다")
-    void findActiveUserByEmail_PendingUser_ReturnsEmpty() {
+    @DisplayName("비활성 유저는 이메일로 조회되지 않는다")
+    void findActiveUserByEmail_InactiveUser_ReturnsEmpty() {
         // given
-        User user = User.builder().email("test@test.com").nickname("tester").status(UserStatus.PENDING).build();
+        User user = User.builder().email("test@test.com").nickname("tester").status(UserStatus.DORMANT).build();
         given(userRepository.findByEmail("test@test.com")).willReturn(Optional.of(user));
 
         // when

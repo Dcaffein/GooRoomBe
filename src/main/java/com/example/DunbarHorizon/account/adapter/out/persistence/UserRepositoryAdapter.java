@@ -53,8 +53,4 @@ public class UserRepositoryAdapter implements UserRepository {
         userJpaRepository.flush();
     }
 
-    @Override
-    public int deleteOldPendingUsers(LocalDateTime threshold) {
-        return userJpaRepository.deleteOldPendingUsers(threshold);
-    }
 }
