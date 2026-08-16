@@ -2,7 +2,6 @@ package com.example.DunbarHorizon.flag.domain.flag.repository;
 
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
-import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -23,7 +22,7 @@ public interface FlagRepository {
     boolean existsByParentId(Long parentId);
     List<Flag> findAllByIdIn(Collection<Long> ids);
     List<Flag> findAllByHostId(Long hostId);
-    List<Flag> findAllByHostIdsAndStatus(Set<Long> friendIds, FlagStatus flagStatus);
+    List<Flag> findByHostIdsAndDeadlineAfter(Set<Long> hostIds, LocalDateTime asOf);
     List<Flag> findRecentByUserId(Long userId, int limit);
 
     // FlagParticipant

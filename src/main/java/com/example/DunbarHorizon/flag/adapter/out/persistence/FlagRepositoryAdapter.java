@@ -4,7 +4,6 @@ import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagJpaReposit
 import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagParticipantJpaRepository;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
-import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -83,18 +82,11 @@ public class FlagRepositoryAdapter implements FlagRepository {
     }
 
     @Override
-    public List<Flag> findAllByHostIdsAndStatus(Set<Long> friendIds, FlagStatus flagStatus) {
-        if (friendIds == null || friendIds.isEmpty()) {
+    public List<Flag> findByHostIdsAndDeadlineAfter(Set<Long> hostIds, LocalDateTime asOf) {
+        if (hostIds == null || hostIds.isEmpty()) {
             return List.of();
         }
-        LocalDateTime now = LocalDateTime.now();
-        return switch (flagStatus) {
-            case RECRUITING -> flagJpaRepository.findRecruitingByHostIds(friendIds, now);
-            case WAITING -> flagJpaRepository.findBeforeActivityByHostIds(friendIds, now);
-            case IN_ACTIVITY -> flagJpaRepository.findInProgressByHostIds(friendIds, now);
-            case ENDED -> flagJpaRepository.findEndedByHostIds(friendIds, now);
-            default -> throw new IllegalArgumentException("조회를 지원하지 않는 플래그 상태입니다: " + flagStatus);
-        };
+        return flagJpaRepository.findByHostIdsAndDeadlineAfter(hostIds, asOf);
     }
 
     // ==================== FlagParticipant ====================

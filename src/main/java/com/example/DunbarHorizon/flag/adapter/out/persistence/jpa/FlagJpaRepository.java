@@ -39,17 +39,8 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
     int expireAllExceedingThreshold(@Param("threshold") LocalDateTime threshold,
                                     @Param("now") LocalDateTime now);
 
-    @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.deadline > :now")
-    List<Flag> findRecruitingByHostIds(@Param("hostIds") Collection<Long> hostIds, @Param("now") LocalDateTime now);
-
-    @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.deadline <= :now AND f.schedule.startDateTime > :now")
-    List<Flag> findBeforeActivityByHostIds(@Param("hostIds") Collection<Long> hostIds, @Param("now") LocalDateTime now);
-
-    @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.startDateTime <= :now AND f.schedule.endDateTime > :now")
-    List<Flag> findInProgressByHostIds(@Param("hostIds") Collection<Long> hostIds, @Param("now") LocalDateTime now);
-
-    @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.endDateTime <= :now")
-    List<Flag> findEndedByHostIds(@Param("hostIds") Collection<Long> hostIds, @Param("now") LocalDateTime now);
+    @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.deadline > :asOf")
+    List<Flag> findByHostIdsAndDeadlineAfter(@Param("hostIds") Collection<Long> hostIds, @Param("asOf") LocalDateTime asOf);
 
     @Query(value = "SELECT id FROM flags WHERE deleted_at < :bufferTime LIMIT 5000",
            nativeQuery = true)

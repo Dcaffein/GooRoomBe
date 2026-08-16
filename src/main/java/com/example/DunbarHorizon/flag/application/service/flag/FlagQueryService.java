@@ -9,13 +9,13 @@ import com.example.DunbarHorizon.flag.application.dto.result.ParticipantResult;
 import com.example.DunbarHorizon.flag.application.port.out.FlagUserPort;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
-import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundException;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +35,7 @@ public class FlagQueryService implements FlagQueryUseCase {
         Set<Long> friendIds = flagUserPort.getRelatedUserIds(userId);
         if (friendIds.isEmpty()) return List.of();
 
-        List<Flag> recruitingFlags = flagRepository.findAllByHostIdsAndStatus(friendIds, FlagStatus.RECRUITING);
+        List<Flag> recruitingFlags = flagRepository.findByHostIdsAndDeadlineAfter(friendIds, LocalDateTime.now());
 
         Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(friendIds);
         List<Long> flagIds = recruitingFlags.stream().map(Flag::getId).toList();

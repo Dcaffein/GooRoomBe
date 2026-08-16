@@ -26,10 +26,14 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class FlagQueryServiceTest {
@@ -87,6 +91,39 @@ class FlagQueryServiceTest {
         List<FlagResult> result = flagQueryService.getRecentFlags(HOST_ID);
 
         assertThat(result).isEmpty();
+    }
+
+    // ===== 친구 Flag 조회 =====
+
+    @Test
+    @DisplayName("친구 Flag 조회 시 마감이 남은 친구들의 플래그가 반환된다")
+    void getFriendFlags_ReturnsFriendFlagsWithRemainingDeadline() {
+        Long friendId = 2L;
+        Set<Long> friendIds = Set.of(friendId, 3L);
+        Flag friendFlag = createRecruitingFlag(1L);
+        ReflectionTestUtils.setField(friendFlag, "hostId", friendId);
+
+        given(flagUserPort.getRelatedUserIds(HOST_ID)).willReturn(friendIds);
+        given(flagRepository.findByHostIdsAndDeadlineAfter(eq(friendIds), any(LocalDateTime.class)))
+                .willReturn(List.of(friendFlag));
+        given(flagRepository.countParticipantsByFlagIds(anyCollection())).willReturn(Map.of(1L, 4));
+        given(flagUserPort.findUserInfosByIds(friendIds)).willReturn(Map.of(friendId, userInfo(friendId)));
+
+        List<FlagResult> result = flagQueryService.getFriendFlags(HOST_ID);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).participantCount()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("친구가 없으면 조회 쿼리를 실행하지 않고 빈 리스트가 반환된다")
+    void getFriendFlags_NoFriends_ReturnsEmptyWithoutQuery() {
+        given(flagUserPort.getRelatedUserIds(HOST_ID)).willReturn(Set.of());
+
+        List<FlagResult> result = flagQueryService.getFriendFlags(HOST_ID);
+
+        assertThat(result).isEmpty();
+        verify(flagRepository, never()).findByHostIdsAndDeadlineAfter(anySet(), any(LocalDateTime.class));
     }
 
     // ===== 목록 조회 =====
