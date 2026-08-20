@@ -62,7 +62,7 @@ public class FlagInvitationManager {
             throw new FlagParticipationDuplicateException(flagId, inviteeId);
         }
 
-        if (invitationRepository.existsPendingByFlagIdAndInviteeId(flagId, inviteeId)) {
+        if (invitationRepository.existsByFlagIdAndInviteeId(flagId, inviteeId)) {
             throw new FlagInvitationDuplicateException(flagId, inviteeId);
         }
 

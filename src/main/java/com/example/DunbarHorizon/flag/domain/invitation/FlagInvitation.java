@@ -23,17 +23,12 @@ public class FlagInvitation extends BaseTimeEntity {
     private Long inviterId;
     private Long inviteeId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private FlagInvitationStatus status;
-
     private LocalDateTime expiresAt;
 
     private FlagInvitation(Long flagId, Long inviterId, Long inviteeId, LocalDateTime expiresAt) {
         this.flagId = flagId;
         this.inviterId = inviterId;
         this.inviteeId = inviteeId;
-        this.status = FlagInvitationStatus.PENDING;
         this.expiresAt = expiresAt;
     }
 
@@ -43,39 +38,26 @@ public class FlagInvitation extends BaseTimeEntity {
 
     public void accept(Long requesterId) {
         validateInvitee(requesterId);
-        validatePending();
         validateNotExpired();
     }
 
     public void reject(Long requesterId) {
         validateInvitee(requesterId);
-        validatePending();
     }
 
     public void cancel(Long requesterId) {
         if (!inviterId.equals(requesterId)) {
             throw new FlagInvitationAccessException("초대를 보낸 본인만 취소할 수 있습니다.");
         }
-        validatePending();
     }
 
     public boolean isExpired() {
         return LocalDateTime.now().isAfter(expiresAt);
     }
 
-    public boolean isPending() {
-        return status == FlagInvitationStatus.PENDING;
-    }
-
     private void validateInvitee(Long requesterId) {
         if (!inviteeId.equals(requesterId)) {
             throw new FlagInvitationAccessException("초대받은 본인만 응답할 수 있습니다.");
-        }
-    }
-
-    private void validatePending() {
-        if (status != FlagInvitationStatus.PENDING) {
-            throw new FlagInvitationAccessException("이미 처리된 초대장입니다.");
         }
     }
 

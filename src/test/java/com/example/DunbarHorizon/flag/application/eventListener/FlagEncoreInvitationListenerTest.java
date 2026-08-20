@@ -63,7 +63,7 @@ class FlagEncoreInvitationListenerTest {
         given(flagRepository.findByParentId(PARENT_FLAG_ID)).willReturn(Optional.of(encoreFlag));
         given(flagRepository.findAllParticipantIds(PARENT_FLAG_ID)).willReturn(parentParticipants);
         given(flagRepository.findAllParticipantIds(ENCORE_FLAG_ID)).willReturn(List.of());
-        given(invitationRepository.findPendingInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of());
+        given(invitationRepository.findInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of());
         given(invitationRepository.saveAll(anyList())).willAnswer(inv -> inv.getArgument(0));
 
         // when
@@ -87,7 +87,7 @@ class FlagEncoreInvitationListenerTest {
         given(flagRepository.findByParentId(PARENT_FLAG_ID)).willReturn(Optional.of(encoreFlag));
         given(flagRepository.findAllParticipantIds(PARENT_FLAG_ID)).willReturn(parentParticipants);
         given(flagRepository.findAllParticipantIds(ENCORE_FLAG_ID)).willReturn(List.of());
-        given(invitationRepository.findPendingInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of());
+        given(invitationRepository.findInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of());
         given(invitationRepository.saveAll(anyList())).willAnswer(inv -> inv.getArgument(0));
 
         // when
@@ -108,7 +108,7 @@ class FlagEncoreInvitationListenerTest {
         given(flagRepository.findByParentId(PARENT_FLAG_ID)).willReturn(Optional.of(encoreFlag));
         given(flagRepository.findAllParticipantIds(PARENT_FLAG_ID)).willReturn(parentParticipants);
         given(flagRepository.findAllParticipantIds(ENCORE_FLAG_ID)).willReturn(List.of());
-        given(invitationRepository.findPendingInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of(20L));
+        given(invitationRepository.findInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of(20L));
         given(invitationRepository.saveAll(anyList())).willAnswer(inv -> inv.getArgument(0));
 
         // when
@@ -129,7 +129,7 @@ class FlagEncoreInvitationListenerTest {
         given(flagRepository.findByParentId(PARENT_FLAG_ID)).willReturn(Optional.of(encoreFlag));
         given(flagRepository.findAllParticipantIds(PARENT_FLAG_ID)).willReturn(parentParticipants);
         given(flagRepository.findAllParticipantIds(ENCORE_FLAG_ID)).willReturn(List.of(30L));
-        given(invitationRepository.findPendingInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of());
+        given(invitationRepository.findInviteeIdsByFlagId(ENCORE_FLAG_ID)).willReturn(Set.of());
         given(invitationRepository.saveAll(anyList())).willAnswer(inv -> inv.getArgument(0));
 
         // when

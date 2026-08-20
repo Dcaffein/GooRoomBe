@@ -37,7 +37,7 @@ public class FlagEncoreInvitationListener {
         List<Long> parentParticipantIds = flagRepository.findAllParticipantIds(event.parentFlagId());
         if (parentParticipantIds.isEmpty()) return;
 
-        Set<Long> alreadyInvited      = invitationRepository.findPendingInviteeIdsByFlagId(encoreFlag.getId());
+        Set<Long> alreadyInvited      = invitationRepository.findInviteeIdsByFlagId(encoreFlag.getId());
         Set<Long> alreadyParticipating = new HashSet<>(flagRepository.findAllParticipantIds(encoreFlag.getId()));
 
         List<FlagInvitation> invitations = parentParticipantIds.stream()

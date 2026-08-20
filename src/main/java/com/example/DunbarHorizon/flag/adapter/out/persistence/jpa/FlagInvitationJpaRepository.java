@@ -1,7 +1,6 @@
 package com.example.DunbarHorizon.flag.adapter.out.persistence.jpa;
 
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitation;
-import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -13,14 +12,14 @@ import java.util.Set;
 
 public interface FlagInvitationJpaRepository extends JpaRepository<FlagInvitation, Long> {
 
-    List<FlagInvitation> findAllByInviteeIdAndStatusOrderByCreatedAtDesc(Long inviteeId, FlagInvitationStatus status);
+    List<FlagInvitation> findAllByInviteeIdOrderByCreatedAtDesc(Long inviteeId);
 
-    List<FlagInvitation> findAllByInviterIdAndStatusOrderByCreatedAtDesc(Long inviterId, FlagInvitationStatus status);
+    List<FlagInvitation> findAllByInviterIdOrderByCreatedAtDesc(Long inviterId);
 
-    boolean existsByFlagIdAndInviteeIdAndStatus(Long flagId, Long inviteeId, FlagInvitationStatus status);
+    boolean existsByFlagIdAndInviteeId(Long flagId, Long inviteeId);
 
-    @Query("SELECT fi.inviteeId FROM FlagInvitation fi WHERE fi.flagId = :flagId AND fi.status = 'PENDING'")
-    Set<Long> findPendingInviteeIdsByFlagId(@Param("flagId") Long flagId);
+    @Query("SELECT fi.inviteeId FROM FlagInvitation fi WHERE fi.flagId = :flagId")
+    Set<Long> findInviteeIdsByFlagId(@Param("flagId") Long flagId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM FlagInvitation fi WHERE fi.flagId IN :flagIds")

@@ -108,7 +108,7 @@ class FlagInvitationManagerTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
         given(flagRepository.findParticipant(FLAG_ID, INVITER_ID)).willReturn(Optional.of(inviter));
         given(flagRepository.isParticipating(FLAG_ID, INVITEE_ID)).willReturn(false);
-        given(invitationRepository.existsPendingByFlagIdAndInviteeId(FLAG_ID, INVITEE_ID)).willReturn(false);
+        given(invitationRepository.existsByFlagIdAndInviteeId(FLAG_ID, INVITEE_ID)).willReturn(false);
 
         // when
         FlagInvitation result = policy.invite(FLAG_ID, INVITER_ID, INVITEE_ID);
@@ -116,7 +116,6 @@ class FlagInvitationManagerTest {
         // then
         assertThat(result).isNotNull();
         assertThat(result.getInviteeId()).isEqualTo(INVITEE_ID);
-        assertThat(result.getStatus()).isEqualTo(FlagInvitationStatus.PENDING);
     }
 
     @Test
@@ -127,7 +126,7 @@ class FlagInvitationManagerTest {
 
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
         given(flagRepository.isParticipating(FLAG_ID, INVITEE_ID)).willReturn(false);
-        given(invitationRepository.existsPendingByFlagIdAndInviteeId(FLAG_ID, INVITEE_ID)).willReturn(false);
+        given(invitationRepository.existsByFlagIdAndInviteeId(FLAG_ID, INVITEE_ID)).willReturn(false);
 
         // when
         FlagInvitation result = policy.invite(FLAG_ID, HOST_ID, INVITEE_ID);
@@ -162,7 +161,7 @@ class FlagInvitationManagerTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
         given(flagRepository.findParticipant(FLAG_ID, INVITER_ID)).willReturn(Optional.of(inviter));
         given(flagRepository.isParticipating(FLAG_ID, INVITEE_ID)).willReturn(false);
-        given(invitationRepository.existsPendingByFlagIdAndInviteeId(FLAG_ID, INVITEE_ID)).willReturn(true);
+        given(invitationRepository.existsByFlagIdAndInviteeId(FLAG_ID, INVITEE_ID)).willReturn(true);
 
         // when / then
         assertThatThrownBy(() -> policy.invite(FLAG_ID, INVITER_ID, INVITEE_ID))

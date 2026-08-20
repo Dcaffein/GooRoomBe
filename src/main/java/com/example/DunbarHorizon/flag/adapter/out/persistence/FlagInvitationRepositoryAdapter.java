@@ -2,7 +2,6 @@ package com.example.DunbarHorizon.flag.adapter.out.persistence;
 
 import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagInvitationJpaRepository;
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitation;
-import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationStatus;
 import com.example.DunbarHorizon.flag.domain.invitation.repository.FlagInvitationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -30,12 +29,12 @@ public class FlagInvitationRepositoryAdapter implements FlagInvitationRepository
 
     @Override
     public List<FlagInvitation> findByInviteeId(Long inviteeId) {
-        return jpaRepository.findAllByInviteeIdAndStatusOrderByCreatedAtDesc(inviteeId, FlagInvitationStatus.PENDING);
+        return jpaRepository.findAllByInviteeIdOrderByCreatedAtDesc(inviteeId);
     }
 
     @Override
     public List<FlagInvitation> findByInviterId(Long inviterId) {
-        return jpaRepository.findAllByInviterIdAndStatusOrderByCreatedAtDesc(inviterId, FlagInvitationStatus.PENDING);
+        return jpaRepository.findAllByInviterIdOrderByCreatedAtDesc(inviterId);
     }
 
     @Override
@@ -44,13 +43,13 @@ public class FlagInvitationRepositoryAdapter implements FlagInvitationRepository
     }
 
     @Override
-    public boolean existsPendingByFlagIdAndInviteeId(Long flagId, Long inviteeId) {
-        return jpaRepository.existsByFlagIdAndInviteeIdAndStatus(flagId, inviteeId, FlagInvitationStatus.PENDING);
+    public boolean existsByFlagIdAndInviteeId(Long flagId, Long inviteeId) {
+        return jpaRepository.existsByFlagIdAndInviteeId(flagId, inviteeId);
     }
 
     @Override
-    public Set<Long> findPendingInviteeIdsByFlagId(Long flagId) {
-        return jpaRepository.findPendingInviteeIdsByFlagId(flagId);
+    public Set<Long> findInviteeIdsByFlagId(Long flagId) {
+        return jpaRepository.findInviteeIdsByFlagId(flagId);
     }
 
     @Override
