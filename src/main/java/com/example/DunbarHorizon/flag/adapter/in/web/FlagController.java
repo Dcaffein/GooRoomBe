@@ -46,75 +46,75 @@ public class FlagController {
         return ResponseEntity.status(HttpStatus.CREATED).body(flagHostUseCase.hostFlag(command));
     }
 
-    @PatchMapping("/{id}/details")
+    @PatchMapping("/{flagId}/details")
     public ResponseEntity<Void> modifyDetails(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId,
             @RequestBody @Valid FlagDetailsUpdateRequest request
     ) {
         flagManagementUseCase.modifyFlagDetails(new FlagDetailsUpdateCommand(
-                id, currentUserId, request.title(), request.description()
+                flagId, currentUserId, request.title(), request.description()
         ));
         return ResponseEntity.ok().build();
     }
 
-    @PatchMapping("/{id}/capacity")
+    @PatchMapping("/{flagId}/capacity")
     public ResponseEntity<Void> modifyCapacity(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId,
             @RequestBody @Valid FlagCapacityUpdateRequest request
     ) {
         flagManagementUseCase.modifyFlagCapacity(new FlagCapacityUpdateCommand(
-                id, currentUserId, request.capacity()
+                flagId, currentUserId, request.capacity()
         ));
         return ResponseEntity.ok().build();
     }
 
-    @PutMapping("/{id}/schedule")
+    @PutMapping("/{flagId}/schedule")
     public ResponseEntity<Void> replaceSchedule(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId,
             @RequestBody @Valid FlagScheduleUpdateRequest request
     ) {
         flagManagementUseCase.reschedule(new FlagScheduleUpdateCommand(
-                id, currentUserId, request.deadline(), request.startDateTime(), request.endDateTime()
+                flagId, currentUserId, request.deadline(), request.startDateTime(), request.endDateTime()
         ));
         return ResponseEntity.ok().build();
     }
 
-    @PatchMapping("/{id}/schedule/deadline")
+    @PatchMapping("/{flagId}/schedule/deadline")
     public ResponseEntity<Void> closeRecruitment(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
     ) {
-        flagManagementUseCase.closeRecruitment(id, currentUserId);
+        flagManagementUseCase.closeRecruitment(flagId, currentUserId);
         return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{flagId}")
     public ResponseEntity<Void> deleteFlag(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
     ) {
-        flagManagementUseCase.closeFlag(id, currentUserId);
+        flagManagementUseCase.closeFlag(flagId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/{id}/participants")
+    @PostMapping("/{flagId}/participants")
     public ResponseEntity<Void> participate(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
     ) {
-        flagParticipationUseCase.participateInFlag(id, currentUserId);
+        flagParticipationUseCase.participateInFlag(flagId, currentUserId);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @DeleteMapping("/{id}/participants")
+    @DeleteMapping("/{flagId}/participants")
     public ResponseEntity<Void> leave(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
     ) {
-        flagParticipationUseCase.leaveFlag(id, currentUserId);
+        flagParticipationUseCase.leaveFlag(flagId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 
@@ -128,7 +128,6 @@ public class FlagController {
         flagInvitationUseCase.updateInvitePermission(flagId, currentUserId, participantId, request.canInvite());
         return ResponseEntity.ok().build();
     }
-
 
     @GetMapping("/me")
     public ResponseEntity<List<FlagResult>> getMyFlagsByRole(
@@ -160,11 +159,11 @@ public class FlagController {
         return ResponseEntity.ok(flagQueryUseCase.getRecentFlags(userId));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{flagId}")
     public ResponseEntity<FlagDetailResult> getFlagDetail(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
     ) {
-        return ResponseEntity.ok(flagQueryUseCase.getFlagDetail(id, currentUserId));
+        return ResponseEntity.ok(flagQueryUseCase.getFlagDetail(flagId, currentUserId));
     }
 }
