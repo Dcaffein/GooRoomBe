@@ -91,7 +91,7 @@ class FlagManagementServiceTest {
         // given
         Flag flag = recruitingFlag();
         given(flagRepository.countParticipants(1L)).willReturn(3);
-        given(flagRepository.findByIdExclusive(1L)).willReturn(Optional.of(flag));
+        given(flagRepository.findByIdForUpdate(1L)).willReturn(Optional.of(flag));
         FlagCapacityUpdateCommand command = new FlagCapacityUpdateCommand(1L, HOST_ID, 5);
 
         // when
@@ -107,7 +107,7 @@ class FlagManagementServiceTest {
         // given
         Flag flag = recruitingFlag();
         given(flagRepository.countParticipants(1L)).willReturn(5);
-        given(flagRepository.findByIdExclusive(1L)).willReturn(Optional.of(flag));
+        given(flagRepository.findByIdForUpdate(1L)).willReturn(Optional.of(flag));
         FlagCapacityUpdateCommand command = new FlagCapacityUpdateCommand(1L, HOST_ID, 3);
 
         // when / then

@@ -29,7 +29,7 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT f FROM Flag f WHERE f.id = :id")
-    Optional<Flag> findByIdExclusive(@Param("id") Long id);
+    Optional<Flag> findByIdForUpdate(@Param("id") Long id);
 
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Flag f SET f.deletedAt = :now " +

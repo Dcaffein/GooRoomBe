@@ -27,7 +27,7 @@ public class FlagManagementService implements FlagManagementUseCase {
     @Override
     public void modifyFlagCapacity(FlagCapacityUpdateCommand command) {
         int currentCount = flagRepository.countParticipants(command.flagId());
-        Flag flag = flagRepository.findByIdExclusive(command.flagId())
+        Flag flag = flagRepository.findByIdForUpdate(command.flagId())
                 .orElseThrow(() -> new FlagNotFoundException(command.flagId()));
         flag.updateCapacity(command.hostId(), command.capacity(), currentCount);
     }
@@ -40,7 +40,7 @@ public class FlagManagementService implements FlagManagementUseCase {
 
     @Override
     public void closeRecruitment(Long flagId, Long hostId) {
-        Flag flag = flagRepository.findByIdExclusive(flagId)
+        Flag flag = flagRepository.findByIdForUpdate(flagId)
                 .orElseThrow(() -> new FlagNotFoundException(flagId));
         flag.closeRecruitment(hostId);
     }

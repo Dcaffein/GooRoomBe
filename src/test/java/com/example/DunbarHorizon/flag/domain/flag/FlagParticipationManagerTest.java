@@ -47,7 +47,7 @@ class FlagParticipationManagerTest {
         Flag flag = recruitingFlag();
         given(flagRepository.findHostIdById(FLAG_ID)).willReturn(Optional.of(HOST_ID));
         given(friendshipChecker.areFriends(HOST_ID, USER_ID)).willReturn(true);
-        given(flagRepository.findByIdExclusive(FLAG_ID)).willReturn(Optional.of(flag));
+        given(flagRepository.findByIdForUpdate(FLAG_ID)).willReturn(Optional.of(flag));
         given(flagRepository.isParticipating(FLAG_ID, USER_ID)).willReturn(false);
         given(flagRepository.countParticipants(FLAG_ID)).willReturn(0);
 
@@ -89,7 +89,7 @@ class FlagParticipationManagerTest {
         Flag flag = recruitingFlag();
         given(flagRepository.findHostIdById(FLAG_ID)).willReturn(Optional.of(HOST_ID));
         given(friendshipChecker.areFriends(HOST_ID, USER_ID)).willReturn(true);
-        given(flagRepository.findByIdExclusive(FLAG_ID)).willReturn(Optional.of(flag));
+        given(flagRepository.findByIdForUpdate(FLAG_ID)).willReturn(Optional.of(flag));
         given(flagRepository.isParticipating(FLAG_ID, USER_ID)).willReturn(true);
 
         // when / then

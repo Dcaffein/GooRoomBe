@@ -42,8 +42,8 @@ public class FlagRepositoryAdapter implements FlagRepository {
     }
 
     @Override
-    public Optional<Flag> findByIdExclusive(Long id) {
-        return flagJpaRepository.findByIdExclusive(id);
+    public Optional<Flag> findByIdForUpdate(Long id) {
+        return flagJpaRepository.findByIdForUpdate(id);
     }
 
     @Override

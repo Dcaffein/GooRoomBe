@@ -15,7 +15,7 @@ public interface FlagRepository {
     Flag save(Flag flag);
     Optional<Flag> findById(Long id);
     Optional<Long> findHostIdById(Long id);
-    Optional<Flag> findByIdExclusive(Long id);
+    Optional<Flag> findByIdForUpdate(Long id);
     Optional<Flag> findByParentId(Long parentId);
     int expireAllExceedingThreshold(LocalDateTime threshold, LocalDateTime now);
     boolean existsByParentId(Long parentId);
