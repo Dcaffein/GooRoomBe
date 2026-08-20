@@ -31,11 +31,6 @@ public class FlagMemorialRepositoryAdapter implements FlagMemorialRepository {
     }
 
     @Override
-    public boolean existsByFlagIdAndWriterId(Long flagId, Long writerId) {
-        return jpaRepository.existsByFlagIdAndWriterId(flagId, writerId);
-    }
-
-    @Override
     public long countByFlagId(Long flagId) {
         return jpaRepository.countByFlagId(flagId);
     }

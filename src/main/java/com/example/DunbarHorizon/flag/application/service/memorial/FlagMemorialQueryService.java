@@ -34,14 +34,14 @@ public class FlagMemorialQueryService implements FlagMemorialQueryUseCase {
             throw new FlagAuthorizationException("플래그 참여자만 Memorial을 조회할 수 있습니다.");
         }
 
-        if (!memorialRepository.existsByFlagId(flagId)) {
+        List<FlagMemorial> memorials = memorialRepository.findAllByFlagId(flagId);
+        if (memorials.isEmpty()) {
             return MemorialListResult.empty();
         }
-        if (!memorialRepository.existsByFlagIdAndWriterId(flagId, viewerId)) {
+        if (memorials.stream().noneMatch(m -> m.getWriterId().equals(viewerId))) {
             return MemorialListResult.asLocked();
         }
 
-        List<FlagMemorial> memorials = memorialRepository.findAllByFlagId(flagId);
         List<Long> writerIds = memorials.stream()
                 .map(FlagMemorial::getWriterId)
                 .distinct()

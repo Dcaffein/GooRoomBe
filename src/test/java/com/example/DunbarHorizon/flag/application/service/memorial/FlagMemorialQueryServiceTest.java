@@ -2,6 +2,7 @@ package com.example.DunbarHorizon.flag.application.service.memorial;
 
 import com.example.DunbarHorizon.flag.application.dto.info.FlagUserInfo;
 import com.example.DunbarHorizon.flag.application.dto.result.MemorialListResult;
+import com.example.DunbarHorizon.flag.application.dto.result.MemorialResult;
 import com.example.DunbarHorizon.flag.application.port.out.FlagUserPort;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagAuthorizationException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundException;
@@ -66,74 +67,75 @@ class FlagMemorialQueryServiceTest {
     void getMemorials_후기없음_empty반환() {
         given(flagRepository.findHostIdById(FLAG_ID)).willReturn(Optional.of(HOST_ID));
         given(flagRepository.isParticipating(FLAG_ID, VIEWER_ID)).willReturn(true);
-        given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(false);
+        given(memorialRepository.findAllByFlagId(FLAG_ID)).willReturn(List.of());
 
         MemorialListResult result = service.getMemorials(FLAG_ID, VIEWER_ID);
 
         assertThat(result.locked()).isFalse();
         assertThat(result.memorials()).isEmpty();
-        verify(memorialRepository, never()).existsByFlagIdAndWriterId(any(), any());
+        verify(flagUserPort, never()).findUserInfosByIds(any());
     }
 
     @Test
     @DisplayName("후기가 있으나 본인이 안 남겼으면 locked=true, 빈 배열을 반환한다")
     void getMemorials_본인미작성_locked반환() {
+        FlagMemorial othersMemorial = mock(FlagMemorial.class);
+        given(othersMemorial.getWriterId()).willReturn(WRITER_ID);
+
         given(flagRepository.findHostIdById(FLAG_ID)).willReturn(Optional.of(HOST_ID));
         given(flagRepository.isParticipating(FLAG_ID, VIEWER_ID)).willReturn(true);
-        given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
-        given(memorialRepository.existsByFlagIdAndWriterId(FLAG_ID, VIEWER_ID)).willReturn(false);
+        given(memorialRepository.findAllByFlagId(FLAG_ID)).willReturn(List.of(othersMemorial));
 
         MemorialListResult result = service.getMemorials(FLAG_ID, VIEWER_ID);
 
         assertThat(result.locked()).isTrue();
         assertThat(result.memorials()).isEmpty();
-        verify(memorialRepository, never()).findAllByFlagId(any());
+        verify(flagUserPort, never()).findUserInfosByIds(any());
     }
 
     @Test
     @DisplayName("본인이 후기를 남겼으면 locked=false, 전체 후기 목록을 반환한다")
     void getMemorials_본인작성완료_목록반환() {
-        FlagMemorial mockMemorial = mock(FlagMemorial.class);
-        given(mockMemorial.getWriterId()).willReturn(WRITER_ID);
-        given(mockMemorial.getId()).willReturn(1L);
-        given(mockMemorial.getContent()).willReturn("즐거웠어요!");
-        given(mockMemorial.getCreatedAt()).willReturn(LocalDateTime.now());
-
-        FlagUserInfo userInfo = new FlagUserInfo(WRITER_ID, "홍길동", null);
+        FlagMemorial mine = memorialOf(1L, VIEWER_ID, "저도 즐거웠어요!");
+        FlagMemorial others = memorialOf(2L, WRITER_ID, "즐거웠어요!");
 
         given(flagRepository.findHostIdById(FLAG_ID)).willReturn(Optional.of(HOST_ID));
         given(flagRepository.isParticipating(FLAG_ID, VIEWER_ID)).willReturn(true);
-        given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
-        given(memorialRepository.existsByFlagIdAndWriterId(FLAG_ID, VIEWER_ID)).willReturn(true);
-        given(memorialRepository.findAllByFlagId(FLAG_ID)).willReturn(List.of(mockMemorial));
-        given(flagUserPort.findUserInfosByIds(any())).willReturn(Map.of(WRITER_ID, userInfo));
+        given(memorialRepository.findAllByFlagId(FLAG_ID)).willReturn(List.of(mine, others));
+        given(flagUserPort.findUserInfosByIds(any())).willReturn(Map.of(
+                VIEWER_ID, new FlagUserInfo(VIEWER_ID, "나", null),
+                WRITER_ID, new FlagUserInfo(WRITER_ID, "홍길동", null)
+        ));
 
         MemorialListResult result = service.getMemorials(FLAG_ID, VIEWER_ID);
 
         assertThat(result.locked()).isFalse();
-        assertThat(result.memorials()).hasSize(1);
-        assertThat(result.memorials().get(0).content()).isEqualTo("즐거웠어요!");
-        assertThat(result.memorials().get(0).nickname()).isEqualTo("홍길동");
+        assertThat(result.memorials()).hasSize(2);
+        assertThat(result.memorials()).extracting(MemorialResult::nickname)
+                .containsExactly("나", "홍길동");
     }
 
     @Test
     @DisplayName("작성자 정보가 없으면 기본 닉네임으로 반환한다")
     void getMemorials_작성자정보없음_기본닉네임반환() {
-        FlagMemorial mockMemorial = mock(FlagMemorial.class);
-        given(mockMemorial.getWriterId()).willReturn(WRITER_ID);
-        given(mockMemorial.getId()).willReturn(1L);
-        given(mockMemorial.getContent()).willReturn("후기 내용");
-        given(mockMemorial.getCreatedAt()).willReturn(LocalDateTime.now());
+        FlagMemorial mine = memorialOf(1L, VIEWER_ID, "후기 내용");
 
         given(flagRepository.findHostIdById(FLAG_ID)).willReturn(Optional.of(HOST_ID));
         given(flagRepository.isParticipating(FLAG_ID, VIEWER_ID)).willReturn(true);
-        given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
-        given(memorialRepository.existsByFlagIdAndWriterId(FLAG_ID, VIEWER_ID)).willReturn(true);
-        given(memorialRepository.findAllByFlagId(FLAG_ID)).willReturn(List.of(mockMemorial));
+        given(memorialRepository.findAllByFlagId(FLAG_ID)).willReturn(List.of(mine));
         given(flagUserPort.findUserInfosByIds(any())).willReturn(Map.of());
 
         MemorialListResult result = service.getMemorials(FLAG_ID, VIEWER_ID);
 
         assertThat(result.memorials().get(0).nickname()).isEqualTo("알 수 없는 사용자");
+    }
+
+    private FlagMemorial memorialOf(Long id, Long writerId, String content) {
+        FlagMemorial memorial = mock(FlagMemorial.class);
+        given(memorial.getWriterId()).willReturn(writerId);
+        given(memorial.getId()).willReturn(id);
+        given(memorial.getContent()).willReturn(content);
+        given(memorial.getCreatedAt()).willReturn(LocalDateTime.now());
+        return memorial;
     }
 }

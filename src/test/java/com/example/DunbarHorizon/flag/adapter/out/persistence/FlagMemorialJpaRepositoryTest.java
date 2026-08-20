@@ -39,20 +39,6 @@ class FlagMemorialJpaRepositoryTest {
     }
 
     @Test
-    @DisplayName("existsByFlagIdAndWriterId가 두 컬럼을 모두 만족할 때만 참이다")
-    void existsByFlagIdAndWriterId_MatchesBothColumns() {
-        // given
-        persist(FLAG_ID, WRITER_ID, "후기");
-        em.flush();
-        em.clear();
-
-        // when & then
-        assertThat(repository.existsByFlagIdAndWriterId(FLAG_ID, WRITER_ID)).isTrue();
-        assertThat(repository.existsByFlagIdAndWriterId(FLAG_ID, OTHER_WRITER_ID)).isFalse();
-        assertThat(repository.existsByFlagIdAndWriterId(OTHER_FLAG_ID, WRITER_ID)).isFalse();
-    }
-
-    @Test
     @DisplayName("flagId로 존재 여부와 개수를 조회한다")
     void existsAndCountByFlagId() {
         // given

@@ -9,7 +9,6 @@ public interface FlagMemorialRepository {
     FlagMemorial save(FlagMemorial memorial);
     Optional<FlagMemorial> findById(Long id);
     boolean existsByFlagId(Long flagId);
-    boolean existsByFlagIdAndWriterId(Long flagId, Long writerId);
     long countByFlagId(Long flagId);
     List<FlagMemorial> findAllByFlagId(Long flagId);
     void delete(FlagMemorial memorial);

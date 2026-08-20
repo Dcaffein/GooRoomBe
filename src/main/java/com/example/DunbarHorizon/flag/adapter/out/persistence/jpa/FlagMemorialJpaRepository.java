@@ -13,7 +13,6 @@ import java.util.List;
 public interface FlagMemorialJpaRepository extends JpaRepository<FlagMemorial, Long> {
 
     boolean existsByFlagId(Long flagId);
-    boolean existsByFlagIdAndWriterId(Long flagId, Long writerId);
     long countByFlagId(Long flagId);
     List<FlagMemorial> findAllByFlagId(Long flagId);
 
