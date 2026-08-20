@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.flag.adapter.in.web;
 
 import com.example.DunbarHorizon.flag.application.dto.result.CommentResult;
+import com.example.DunbarHorizon.flag.domain.comment.exception.FlagCommentNotFoundException;
 import com.example.DunbarHorizon.support.BaseControllerTest;
 import com.example.DunbarHorizon.support.WithMockCustomUser;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +15,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -81,18 +83,18 @@ class FlagCommentControllerTest extends BaseControllerTest {
     @Test
     @DisplayName("답글 생성 시 201을 반환하고 createReply()를 호출한다")
     void createReply_Returns201() throws Exception {
-        given(flagCommentCommandUseCase.createReply(eq(1L), eq(CURRENT_USER_ID), anyString(), anyBoolean()))
+        given(flagCommentCommandUseCase.createReply(eq(1L), eq(2L), eq(CURRENT_USER_ID), anyString(), anyBoolean()))
                 .willReturn(11L);
         String body = """
                 {"content": "답글 내용", "isPrivate": false}
                 """;
 
-        mockMvc.perform(post("/api/v1/comments/1/replies")
+        mockMvc.perform(post("/api/v1/flags/1/comments/2/replies")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
-        verify(flagCommentCommandUseCase).createReply(eq(1L), eq(CURRENT_USER_ID), eq("답글 내용"), eq(false));
+        verify(flagCommentCommandUseCase).createReply(eq(1L), eq(2L), eq(CURRENT_USER_ID), eq("답글 내용"), eq(false));
     }
 
     @Test
@@ -102,20 +104,56 @@ class FlagCommentControllerTest extends BaseControllerTest {
                 {"content": "수정된 내용", "isPrivate": false}
                 """;
 
-        mockMvc.perform(patch("/api/v1/comments/1")
+        mockMvc.perform(patch("/api/v1/flags/1/comments/2")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
 
-        verify(flagCommentCommandUseCase).updateComment(1L, CURRENT_USER_ID, "수정된 내용", false);
+        verify(flagCommentCommandUseCase).updateComment(1L, 2L, CURRENT_USER_ID, "수정된 내용", false);
     }
 
     @Test
     @DisplayName("댓글 삭제 시 204를 반환하고 deleteComment()를 호출한다")
     void deleteComment_Returns204() throws Exception {
-        mockMvc.perform(delete("/api/v1/comments/1"))
+        mockMvc.perform(delete("/api/v1/flags/1/comments/2"))
                 .andExpect(status().isNoContent());
 
-        verify(flagCommentCommandUseCase).deleteComment(1L, CURRENT_USER_ID);
+        verify(flagCommentCommandUseCase).deleteComment(1L, 2L, CURRENT_USER_ID);
+    }
+
+    @Test
+    @DisplayName("Comment가 경로의 Flag에 속하지 않으면 404를 반환한다")
+    void updateComment_WrongFlag_Returns404() throws Exception {
+        willThrow(new FlagCommentNotFoundException(2L))
+                .given(flagCommentCommandUseCase)
+                .updateComment(eq(999L), eq(2L), eq(CURRENT_USER_ID), anyString(), anyBoolean());
+
+        mockMvc.perform(patch("/api/v1/flags/999/comments/2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content": "수정 시도", "isPrivate": false}
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Comment 최상위 URL은 더 이상 매핑되지 않는다")
+    void legacyTopLevelCommentUrls_Return404() throws Exception {
+        mockMvc.perform(delete("/api/v1/comments/1"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(patch("/api/v1/comments/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content": "x", "isPrivate": false}
+                                """))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/v1/comments/1/replies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content": "x", "isPrivate": false}
+                                """))
+                .andExpect(status().isNotFound());
     }
 }

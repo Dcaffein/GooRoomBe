@@ -89,7 +89,7 @@ class FlagCommentCommandServiceTest {
         given(commentRepository.save(any(FlagComment.class))).willReturn(savedReply);
 
         // when
-        Long result = flagCommentCommandService.createReply(1L, USER_ID, "답글 내용", false);
+        Long result = flagCommentCommandService.createReply(FLAG_ID, 1L, USER_ID, "답글 내용", false);
 
         // then
         assertThat(result).isEqualTo(2L);
@@ -102,7 +102,7 @@ class FlagCommentCommandServiceTest {
         given(commentRepository.findById(999L)).willReturn(Optional.empty());
 
         // when / then
-        assertThatThrownBy(() -> flagCommentCommandService.createReply(999L, USER_ID, "내용", false))
+        assertThatThrownBy(() -> flagCommentCommandService.createReply(FLAG_ID, 999L, USER_ID, "내용", false))
                 .isInstanceOf(FlagCommentNotFoundException.class);
     }
 
@@ -119,7 +119,7 @@ class FlagCommentCommandServiceTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(createFlag()));
 
         // when / then
-        assertThatThrownBy(() -> flagCommentCommandService.createReply(2L, USER_ID, "2단 답글", false))
+        assertThatThrownBy(() -> flagCommentCommandService.createReply(FLAG_ID, 2L, USER_ID, "2단 답글", false))
                 .isInstanceOf(FlagCommentReplyDepthException.class);
     }
 
@@ -132,7 +132,7 @@ class FlagCommentCommandServiceTest {
         given(commentRepository.findById(1L)).willReturn(Optional.of(comment));
 
         // when
-        flagCommentCommandService.updateComment(1L, USER_ID, "수정된 내용", false);
+        flagCommentCommandService.updateComment(FLAG_ID, 1L, USER_ID, "수정된 내용", false);
 
         // then
         assertThat(comment.getContent()).isEqualTo("수정된 내용");
@@ -146,7 +146,7 @@ class FlagCommentCommandServiceTest {
         given(commentRepository.findById(1L)).willReturn(Optional.of(comment));
 
         // when / then
-        assertThatThrownBy(() -> flagCommentCommandService.updateComment(1L, HOST_ID, "수정 시도", false))
+        assertThatThrownBy(() -> flagCommentCommandService.updateComment(FLAG_ID, 1L, HOST_ID, "수정 시도", false))
                 .isInstanceOf(FlagCommentAuthorizationException.class);
     }
 
@@ -157,7 +157,7 @@ class FlagCommentCommandServiceTest {
         given(commentRepository.findById(999L)).willReturn(Optional.empty());
 
         // when / then
-        assertThatThrownBy(() -> flagCommentCommandService.updateComment(999L, USER_ID, "내용", false))
+        assertThatThrownBy(() -> flagCommentCommandService.updateComment(FLAG_ID, 999L, USER_ID, "내용", false))
                 .isInstanceOf(FlagCommentNotFoundException.class);
     }
 
@@ -173,7 +173,7 @@ class FlagCommentCommandServiceTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
 
         // when
-        flagCommentCommandService.deleteComment(1L, USER_ID);
+        flagCommentCommandService.deleteComment(FLAG_ID, 1L, USER_ID);
 
         // then
         verify(commentRepository).deleteWithReplies(1L);
@@ -191,7 +191,46 @@ class FlagCommentCommandServiceTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
 
         // when / then
-        assertThatThrownBy(() -> flagCommentCommandService.deleteComment(1L, 99L))
+        assertThatThrownBy(() -> flagCommentCommandService.deleteComment(FLAG_ID, 1L, 99L))
                 .isInstanceOf(FlagCommentAuthorizationException.class);
+    }
+
+    @Test
+    @DisplayName("Comment가 다른 Flag에 속하면 수정 시 FlagCommentNotFoundException이 발생한다")
+    void updateComment_BelongsToOtherFlag_ThrowsException() {
+        // given
+        FlagComment comment = FlagComment.createRoot(FLAG_ID, USER_ID, "내용", false);
+        ReflectionTestUtils.setField(comment, "id", 1L);
+        given(commentRepository.findById(1L)).willReturn(Optional.of(comment));
+
+        // when / then
+        assertThatThrownBy(() -> flagCommentCommandService.updateComment(999L, 1L, USER_ID, "수정", false))
+                .isInstanceOf(FlagCommentNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Comment가 다른 Flag에 속하면 삭제 시 FlagCommentNotFoundException이 발생한다")
+    void deleteComment_BelongsToOtherFlag_ThrowsException() {
+        // given
+        FlagComment comment = FlagComment.createRoot(FLAG_ID, USER_ID, "내용", false);
+        ReflectionTestUtils.setField(comment, "id", 1L);
+        given(commentRepository.findByIdForUpdate(1L)).willReturn(Optional.of(comment));
+
+        // when / then
+        assertThatThrownBy(() -> flagCommentCommandService.deleteComment(999L, 1L, USER_ID))
+                .isInstanceOf(FlagCommentNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("부모 Comment가 다른 Flag에 속하면 답글 작성 시 FlagCommentNotFoundException이 발생한다")
+    void createReply_ParentBelongsToOtherFlag_ThrowsException() {
+        // given
+        FlagComment parent = FlagComment.createRoot(FLAG_ID, HOST_ID, "루트", false);
+        ReflectionTestUtils.setField(parent, "id", 1L);
+        given(commentRepository.findById(1L)).willReturn(Optional.of(parent));
+
+        // when / then
+        assertThatThrownBy(() -> flagCommentCommandService.createReply(999L, 1L, USER_ID, "답글", false))
+                .isInstanceOf(FlagCommentNotFoundException.class);
     }
 }

@@ -87,10 +87,11 @@ class FlagMemorialCommandServiceTest {
     void updateMemorial_ByWriter_Success() {
         // given
         FlagMemorial mockMemorial = mock(FlagMemorial.class);
+        given(mockMemorial.getFlagId()).willReturn(FLAG_ID);
         given(memorialRepository.findById(1L)).willReturn(Optional.of(mockMemorial));
 
         // when
-        flagMemorialCommandService.updateMemorial(1L, WRITER_ID, "수정된 내용");
+        flagMemorialCommandService.updateMemorial(FLAG_ID, 1L, WRITER_ID, "수정된 내용");
 
         // then
         verify(mockMemorial).updateContent(WRITER_ID, "수정된 내용");
@@ -101,12 +102,13 @@ class FlagMemorialCommandServiceTest {
     void updateMemorial_ByNonWriter_ThrowsException() {
         // given
         FlagMemorial mockMemorial = mock(FlagMemorial.class);
+        given(mockMemorial.getFlagId()).willReturn(FLAG_ID);
         given(memorialRepository.findById(1L)).willReturn(Optional.of(mockMemorial));
         willThrow(new FlagAuthorizationException("후기 작성자만 접근 가능합니다."))
                 .given(mockMemorial).updateContent(OTHER_ID, "수정 시도");
 
         // when / then
-        assertThatThrownBy(() -> flagMemorialCommandService.updateMemorial(1L, OTHER_ID, "수정 시도"))
+        assertThatThrownBy(() -> flagMemorialCommandService.updateMemorial(FLAG_ID, 1L, OTHER_ID, "수정 시도"))
                 .isInstanceOf(FlagAuthorizationException.class);
     }
 
@@ -117,7 +119,7 @@ class FlagMemorialCommandServiceTest {
         given(memorialRepository.findById(999L)).willReturn(Optional.empty());
 
         // when / then
-        assertThatThrownBy(() -> flagMemorialCommandService.updateMemorial(999L, WRITER_ID, "내용"))
+        assertThatThrownBy(() -> flagMemorialCommandService.updateMemorial(FLAG_ID, 999L, WRITER_ID, "내용"))
                 .isInstanceOf(FlagMemorialNotFoundException.class);
     }
 
@@ -130,7 +132,7 @@ class FlagMemorialCommandServiceTest {
         given(memorialRepository.findById(1L)).willReturn(Optional.of(mockMemorial));
 
         // when
-        flagMemorialCommandService.deleteMemorial(1L, WRITER_ID);
+        flagMemorialCommandService.deleteMemorial(FLAG_ID, 1L, WRITER_ID);
 
         // then
         verify(mockMemorial).validateDeletion(WRITER_ID);
@@ -143,12 +145,13 @@ class FlagMemorialCommandServiceTest {
     void deleteMemorial_ByNonWriter_ThrowsException() {
         // given
         FlagMemorial mockMemorial = mock(FlagMemorial.class);
+        given(mockMemorial.getFlagId()).willReturn(FLAG_ID);
         given(memorialRepository.findById(1L)).willReturn(Optional.of(mockMemorial));
         willThrow(new FlagAuthorizationException("후기 작성자만 접근 가능합니다."))
                 .given(mockMemorial).validateDeletion(OTHER_ID);
 
         // when / then
-        assertThatThrownBy(() -> flagMemorialCommandService.deleteMemorial(1L, OTHER_ID))
+        assertThatThrownBy(() -> flagMemorialCommandService.deleteMemorial(FLAG_ID, 1L, OTHER_ID))
                 .isInstanceOf(FlagAuthorizationException.class);
     }
 
@@ -159,7 +162,33 @@ class FlagMemorialCommandServiceTest {
         given(memorialRepository.findById(999L)).willReturn(Optional.empty());
 
         // when / then
-        assertThatThrownBy(() -> flagMemorialCommandService.deleteMemorial(999L, WRITER_ID))
+        assertThatThrownBy(() -> flagMemorialCommandService.deleteMemorial(FLAG_ID, 999L, WRITER_ID))
+                .isInstanceOf(FlagMemorialNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Memorial이 다른 Flag에 속하면 수정 시 FlagMemorialNotFoundException이 발생한다")
+    void updateMemorial_BelongsToOtherFlag_ThrowsException() {
+        // given
+        FlagMemorial mockMemorial = mock(FlagMemorial.class);
+        given(mockMemorial.getFlagId()).willReturn(FLAG_ID);
+        given(memorialRepository.findById(1L)).willReturn(Optional.of(mockMemorial));
+
+        // when / then
+        assertThatThrownBy(() -> flagMemorialCommandService.updateMemorial(999L, 1L, WRITER_ID, "수정"))
+                .isInstanceOf(FlagMemorialNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Memorial이 다른 Flag에 속하면 삭제 시 FlagMemorialNotFoundException이 발생한다")
+    void deleteMemorial_BelongsToOtherFlag_ThrowsException() {
+        // given
+        FlagMemorial mockMemorial = mock(FlagMemorial.class);
+        given(mockMemorial.getFlagId()).willReturn(FLAG_ID);
+        given(memorialRepository.findById(1L)).willReturn(Optional.of(mockMemorial));
+
+        // when / then
+        assertThatThrownBy(() -> flagMemorialCommandService.deleteMemorial(999L, 1L, WRITER_ID))
                 .isInstanceOf(FlagMemorialNotFoundException.class);
     }
 }

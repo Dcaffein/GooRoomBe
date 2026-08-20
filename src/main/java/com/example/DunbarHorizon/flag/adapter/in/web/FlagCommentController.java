@@ -15,13 +15,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@RequestMapping("/api/v1/flags/{flagId}/comments")
 @RequiredArgsConstructor
 public class FlagCommentController {
 
     private final FlagCommentCommandUseCase flagCommentCommandUseCase;
     private final FlagCommentQueryUseCase commentQueryUseCase;
 
-    @GetMapping("/api/v1/flags/{flagId}/comments")
+    @GetMapping
     public ResponseEntity<List<CommentResult>> getComments(
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
@@ -30,12 +31,12 @@ public class FlagCommentController {
         return ResponseEntity.ok(commentTree);
     }
 
-    @GetMapping("/api/v1/flags/{flagId}/comments/count")
+    @GetMapping("/count")
     public ResponseEntity<Long> getCommentCount(@PathVariable Long flagId) {
         return ResponseEntity.ok(commentQueryUseCase.getCommentCount(flagId));
     }
 
-    @PostMapping("/api/v1/flags/{flagId}/comments")
+    @PostMapping
     public ResponseEntity<Long> createRootComment(
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId,
@@ -47,36 +48,39 @@ public class FlagCommentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(commentId);
     }
 
-    @PostMapping("/api/v1/comments/{parentId}/replies")
+    @PostMapping("/{parentId}/replies")
     public ResponseEntity<Long> createReply(
+            @PathVariable Long flagId,
             @PathVariable Long parentId,
             @CurrentUserId Long currentUserId,
             @Valid @RequestBody CommentCreateRequest request
     ) {
         Long replyId = flagCommentCommandUseCase.createReply(
-                parentId, currentUserId, request.content(), request.isPrivate()
+                flagId, parentId, currentUserId, request.content(), request.isPrivate()
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(replyId);
     }
 
-    @PatchMapping("/api/v1/comments/{commentId}")
+    @PatchMapping("/{commentId}")
     public ResponseEntity<Void> updateComment(
+            @PathVariable Long flagId,
             @PathVariable Long commentId,
             @CurrentUserId Long currentUserId,
             @Valid @RequestBody CommentUpdateRequest request
     ) {
         flagCommentCommandUseCase.updateComment(
-                commentId, currentUserId, request.content(), request.isPrivate()
+                flagId, commentId, currentUserId, request.content(), request.isPrivate()
         );
         return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/api/v1/comments/{commentId}")
+    @DeleteMapping("/{commentId}")
     public ResponseEntity<Void> deleteComment(
+            @PathVariable Long flagId,
             @PathVariable Long commentId,
             @CurrentUserId Long currentUserId
     ) {
-        flagCommentCommandUseCase.deleteComment(commentId, currentUserId);
+        flagCommentCommandUseCase.deleteComment(flagId, commentId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 }

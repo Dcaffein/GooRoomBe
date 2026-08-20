@@ -30,12 +30,13 @@ public class FlagCommentCommandService implements FlagCommentCommandUseCase {
 
     @Override
     @Transactional
-    public Long createReply(Long parentId, Long userId, String content, boolean isPrivate) {
+    public Long createReply(Long flagId, Long parentId, Long userId, String content, boolean isPrivate) {
         FlagComment parent = commentRepository.findById(parentId)
                 .orElseThrow(() -> new FlagCommentNotFoundException(parentId));
+        validateBelongsToFlag(parent, flagId);
 
-        flagRepository.findById(parent.getFlagId())
-                .orElseThrow(() -> new FlagNotFoundException(parent.getFlagId()));
+        flagRepository.findById(flagId)
+                .orElseThrow(() -> new FlagNotFoundException(flagId));
 
         FlagComment reply = parent.createReply(userId, content, isPrivate);
         return commentRepository.save(reply).getId();
@@ -43,24 +44,32 @@ public class FlagCommentCommandService implements FlagCommentCommandUseCase {
 
     @Override
     @Transactional
-    public void updateComment(Long commentId, Long userId, String content, boolean isPrivate) {
+    public void updateComment(Long flagId, Long commentId, Long userId, String content, boolean isPrivate) {
         FlagComment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new FlagCommentNotFoundException(commentId));
+        validateBelongsToFlag(comment, flagId);
 
         comment.update(userId, content, isPrivate);
     }
 
     @Override
     @Transactional
-    public void deleteComment(Long commentId, Long userId) {
+    public void deleteComment(Long flagId, Long commentId, Long userId) {
         FlagComment comment = commentRepository.findByIdForUpdate(commentId)
                 .orElseThrow(() -> new FlagCommentNotFoundException(commentId));
+        validateBelongsToFlag(comment, flagId);
 
-        Flag flag = flagRepository.findById(comment.getFlagId())
-                .orElseThrow(() -> new FlagNotFoundException(comment.getFlagId()));
+        Flag flag = flagRepository.findById(flagId)
+                .orElseThrow(() -> new FlagNotFoundException(flagId));
 
         comment.validateDeletionAuthority(userId, flag.getHostId());
 
         commentRepository.deleteWithReplies(comment.getId());
+    }
+
+    private void validateBelongsToFlag(FlagComment comment, Long flagId) {
+        if (!flagId.equals(comment.getFlagId())) {
+            throw new FlagCommentNotFoundException(comment.getId());
+        }
     }
 }

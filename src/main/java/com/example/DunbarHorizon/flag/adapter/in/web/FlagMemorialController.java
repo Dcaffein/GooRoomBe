@@ -13,14 +13,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/flags")
+@RequestMapping("/api/v1/flags/{flagId}/memorials")
 @RequiredArgsConstructor
 public class FlagMemorialController {
 
     private final FlagMemorialCommandUseCase memorialCommandUseCase;
     private final FlagMemorialQueryUseCase memorialQueryUseCase;
 
-    @PostMapping("/{flagId}/memorials")
+    @PostMapping
     public ResponseEntity<Long> createMemorial(
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId,
@@ -32,7 +32,7 @@ public class FlagMemorialController {
         return ResponseEntity.status(HttpStatus.CREATED).body(memorialId);
     }
 
-    @GetMapping("/{flagId}/memorials")
+    @GetMapping
     public ResponseEntity<MemorialListResult> getMemorials(
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
@@ -40,27 +40,29 @@ public class FlagMemorialController {
         return ResponseEntity.ok(memorialQueryUseCase.getMemorials(flagId, currentUserId));
     }
 
-    @GetMapping("/{flagId}/memorials/count")
+    @GetMapping("/count")
     public ResponseEntity<Long> getMemorialCount(@PathVariable Long flagId) {
         return ResponseEntity.ok(memorialQueryUseCase.getMemorialCount(flagId));
     }
 
-    @PatchMapping("/memorials/{id}")
+    @PatchMapping("/{memorialId}")
     public ResponseEntity<Void> updateMemorial(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
+            @PathVariable Long memorialId,
             @CurrentUserId Long currentUserId,
             @RequestBody @Valid MemorialUpdateRequest request
     ) {
-        memorialCommandUseCase.updateMemorial(id, currentUserId, request.content());
+        memorialCommandUseCase.updateMemorial(flagId, memorialId, currentUserId, request.content());
         return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/memorials/{id}")
+    @DeleteMapping("/{memorialId}")
     public ResponseEntity<Void> deleteMemorial(
-            @PathVariable Long id,
+            @PathVariable Long flagId,
+            @PathVariable Long memorialId,
             @CurrentUserId Long currentUserId
     ) {
-        memorialCommandUseCase.deleteMemorial(id, currentUserId);
+        memorialCommandUseCase.deleteMemorial(flagId, memorialId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 }

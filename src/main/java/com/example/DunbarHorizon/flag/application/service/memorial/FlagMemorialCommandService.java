@@ -37,21 +37,29 @@ public class FlagMemorialCommandService implements FlagMemorialCommandUseCase {
     }
 
     @Override
-    public void updateMemorial(Long memorialId, Long requesterId, String content) {
+    public void updateMemorial(Long flagId, Long memorialId, Long requesterId, String content) {
         FlagMemorial memorial = memorialRepository.findById(memorialId)
                 .orElseThrow(() -> new FlagMemorialNotFoundException(memorialId));
+        validateBelongsToFlag(memorial, flagId);
 
         memorial.updateContent(requesterId, content);
     }
 
     @Override
-    public void deleteMemorial(Long memorialId, Long requesterId) {
+    public void deleteMemorial(Long flagId, Long memorialId, Long requesterId) {
         FlagMemorial memorial = memorialRepository.findById(memorialId)
                 .orElseThrow(() -> new FlagMemorialNotFoundException(memorialId));
+        validateBelongsToFlag(memorial, flagId);
 
         memorial.validateDeletion(requesterId);
 
         memorialRepository.delete(memorial);
         eventPublisher.publishEvent(new MemorialDeletedEvent(memorial.getFlagId()));
+    }
+
+    private void validateBelongsToFlag(FlagMemorial memorial, Long flagId) {
+        if (!flagId.equals(memorial.getFlagId())) {
+            throw new FlagMemorialNotFoundException(memorial.getId());
+        }
     }
 }

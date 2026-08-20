@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.flag.adapter.in.web;
 
 import com.example.DunbarHorizon.flag.application.dto.result.MemorialListResult;
+import com.example.DunbarHorizon.flag.domain.memorial.exception.FlagMemorialNotFoundException;
 import com.example.DunbarHorizon.support.BaseControllerTest;
 import com.example.DunbarHorizon.support.WithMockCustomUser;
 import org.junit.jupiter.api.DisplayName;
@@ -10,6 +11,7 @@ import org.springframework.http.MediaType;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -65,20 +67,38 @@ class FlagMemorialControllerTest extends BaseControllerTest {
                 {"content": "수정된 Memorial 내용"}
                 """;
 
-        mockMvc.perform(patch("/api/v1/flags/memorials/1")
+        mockMvc.perform(patch("/api/v1/flags/1/memorials/2")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
 
-        verify(flagMemorialCommandUseCase).updateMemorial(1L, CURRENT_USER_ID, "수정된 Memorial 내용");
+        verify(flagMemorialCommandUseCase).updateMemorial(1L, 2L, CURRENT_USER_ID, "수정된 Memorial 내용");
     }
 
     @Test
     @DisplayName("Memorial 삭제 시 204를 반환하고 deleteMemorial()를 호출한다")
     void deleteMemorial_Returns204() throws Exception {
-        mockMvc.perform(delete("/api/v1/flags/memorials/1"))
+        mockMvc.perform(delete("/api/v1/flags/1/memorials/2"))
                 .andExpect(status().isNoContent());
 
-        verify(flagMemorialCommandUseCase).deleteMemorial(1L, CURRENT_USER_ID);
+        verify(flagMemorialCommandUseCase).deleteMemorial(1L, 2L, CURRENT_USER_ID);
+    }
+
+    @Test
+    @DisplayName("Memorial이 경로의 Flag에 속하지 않으면 404를 반환한다")
+    void deleteMemorial_WrongFlag_Returns404() throws Exception {
+        willThrow(new FlagMemorialNotFoundException(2L))
+                .given(flagMemorialCommandUseCase)
+                .deleteMemorial(999L, 2L, CURRENT_USER_ID);
+
+        mockMvc.perform(delete("/api/v1/flags/999/memorials/2"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("구 Memorial 단건 URL은 더 이상 매핑되지 않는다")
+    void legacyMemorialUrls_Return404() throws Exception {
+        mockMvc.perform(delete("/api/v1/flags/memorials/1"))
+                .andExpect(status().isNotFound());
     }
 }
