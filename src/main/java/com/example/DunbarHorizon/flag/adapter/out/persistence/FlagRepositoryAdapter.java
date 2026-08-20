@@ -52,11 +52,6 @@ public class FlagRepositoryAdapter implements FlagRepository {
     }
 
     @Override
-    public boolean existsById(Long id) {
-        return flagJpaRepository.existsById(id);
-    }
-
-    @Override
     public int expireAllExceedingThreshold(LocalDateTime threshold, LocalDateTime now) {
         return flagJpaRepository.expireAllExceedingThreshold(threshold, now);
     }
@@ -129,11 +124,6 @@ public class FlagRepositoryAdapter implements FlagRepository {
     @Override
     public List<Long> findAllParticipantIds(Long flagId) {
         return participantJpaRepository.findAllParticipantIdsByFlagId(flagId);
-    }
-
-    @Override
-    public void deleteAllParticipants(Long flagId) {
-        participantJpaRepository.deleteAllByFlagId(flagId);
     }
 
     @Override

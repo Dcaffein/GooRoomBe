@@ -6,7 +6,6 @@ import com.example.DunbarHorizon.flag.domain.invitation.repository.FlagInvitatio
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -57,8 +56,4 @@ public class FlagInvitationRepositoryAdapter implements FlagInvitationRepository
         jpaRepository.deleteById(id);
     }
 
-    @Override
-    public void hardDeleteByFlagIdsIn(Collection<Long> flagIds) {
-        jpaRepository.hardDeleteByFlagIdsIn(flagIds);
-    }
 }

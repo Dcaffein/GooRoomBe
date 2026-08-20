@@ -38,10 +38,6 @@ public interface FlagParticipantJpaRepository extends JpaRepository<FlagParticip
     List<Long> findFlagIdsByParticipantId(@Param("participantId") Long participantId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("DELETE FROM FlagParticipant fp WHERE fp.flagId = :flagId")
-    void deleteAllByFlagId(@Param("flagId") Long flagId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM FlagParticipant fp WHERE fp.flagId IN :flagIds")
     void hardDeleteByFlagIdsIn(@Param("flagIds") Collection<Long> flagIds);
 }
