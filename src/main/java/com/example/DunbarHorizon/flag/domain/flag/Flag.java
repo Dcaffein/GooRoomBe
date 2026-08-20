@@ -57,7 +57,6 @@ public class Flag extends BaseTimeAggregateRoot implements SoftDeletable {
     private Long parentId;
 
     @Getter
-    @Column(name = "is_preserved")
     private boolean autoExpiryExempt = false;
 
     @Getter

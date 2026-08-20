@@ -18,10 +18,10 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
-class FlagPreservationPolicyTest {
+class FlagExpiryExemptionPolicyTest {
 
     @InjectMocks
-    private FlagPreservationPolicy flagPreservationPolicy;
+    private FlagExpiryExemptionPolicy flagExpiryExemptionPolicy;
 
     @Mock
     private FlagRepository flagRepository;
@@ -48,7 +48,7 @@ class FlagPreservationPolicyTest {
         given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
 
         // when
-        flagPreservationPolicy.refresh(FLAG_ID);
+        flagExpiryExemptionPolicy.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isTrue();
@@ -64,7 +64,7 @@ class FlagPreservationPolicyTest {
         given(flagRepository.existsByParentId(FLAG_ID)).willReturn(true);
 
         // when
-        flagPreservationPolicy.refresh(FLAG_ID);
+        flagExpiryExemptionPolicy.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isTrue();
@@ -81,7 +81,7 @@ class FlagPreservationPolicyTest {
         given(flagRepository.existsByParentId(FLAG_ID)).willReturn(false);
 
         // when
-        flagPreservationPolicy.refresh(FLAG_ID);
+        flagExpiryExemptionPolicy.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isFalse();
@@ -94,7 +94,7 @@ class FlagPreservationPolicyTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> flagPreservationPolicy.refresh(FLAG_ID))
+        assertThatThrownBy(() -> flagExpiryExemptionPolicy.refresh(FLAG_ID))
                 .isInstanceOf(FlagNotFoundException.class);
     }
 }

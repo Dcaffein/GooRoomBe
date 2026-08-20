@@ -14,14 +14,14 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * FlagPreservationPolicy가 save() 없이 더티 체킹만으로 반영되는지 확인한다.
+ * FlagExpiryExemptionPolicy가 save() 없이 더티 체킹만으로 반영되는지 확인한다.
  * mock 테스트로는 잡히지 않는 부분이라 실제 DB로 검증한다.
  */
 @JpaRepositoryTest
-@Import({FlagPreservationPolicy.class, FlagRepositoryAdapter.class, FlagMemorialRepositoryAdapter.class})
-class FlagPreservationPersistenceTest {
+@Import({FlagExpiryExemptionPolicy.class, FlagRepositoryAdapter.class, FlagMemorialRepositoryAdapter.class})
+class FlagExpiryExemptionPersistenceTest {
 
-    @Autowired private FlagPreservationPolicy policy;
+    @Autowired private FlagExpiryExemptionPolicy policy;
     @Autowired private TestEntityManager em;
 
     private static final Long HOST_ID = 1L;
@@ -35,7 +35,7 @@ class FlagPreservationPersistenceTest {
     }
 
     @Test
-    @DisplayName("Encore가 생기면 save() 없이 is_preserved가 반영된다")
+    @DisplayName("Encore가 생기면 save() 없이 auto_expiry_exempt가 반영된다")
     void refresh_EncoreExists_PersistsWithoutSave() {
         // given
         Flag parent = persistEndedFlag();
@@ -57,8 +57,8 @@ class FlagPreservationPersistenceTest {
     }
 
     @Test
-    @DisplayName("보존 조건이 사라지면 false로 되돌아간다")
-    void refresh_NoPreservationSource_PersistsFalse() {
+    @DisplayName("면제 조건이 사라지면 false로 되돌아간다")
+    void refresh_NoExemptionSource_PersistsFalse() {
         // given
         Flag flag = persistEndedFlag();
         flag.updateAutoExpiryExempt(true);

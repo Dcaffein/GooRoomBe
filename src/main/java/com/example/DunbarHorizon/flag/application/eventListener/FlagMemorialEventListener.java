@@ -1,6 +1,6 @@
 package com.example.DunbarHorizon.flag.application.eventListener;
 
-import com.example.DunbarHorizon.flag.domain.flag.FlagPreservationPolicy;
+import com.example.DunbarHorizon.flag.domain.flag.FlagExpiryExemptionPolicy;
 import com.example.DunbarHorizon.flag.domain.memorial.event.MemorialCreatedEvent;
 import com.example.DunbarHorizon.flag.domain.memorial.event.MemorialDeletedEvent;
 import lombok.RequiredArgsConstructor;
@@ -12,15 +12,15 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class FlagMemorialEventListener {
 
-    private final FlagPreservationPolicy flagPreservationPolicy;
+    private final FlagExpiryExemptionPolicy flagExpiryExemptionPolicy;
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleMemorialCreated(MemorialCreatedEvent event) {
-        flagPreservationPolicy.refresh(event.flagId());
+        flagExpiryExemptionPolicy.refresh(event.flagId());
     }
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleMemorialDeleted(MemorialDeletedEvent event) {
-        flagPreservationPolicy.refresh(event.flagId());
+        flagExpiryExemptionPolicy.refresh(event.flagId());
     }
 }

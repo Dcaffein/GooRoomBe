@@ -9,6 +9,7 @@ flag 도메인에서 세 가지를 걷어낸다.
 1. **죽은 상태 표현** — `FlagInvitation.status`, `expiresAt`, 사용처 없는 `FlagStatus` 헬퍼
 2. **도메인 예외가 500으로 새는 경로** — `BusinessException`을 상속하지 않은 raw JDK 예외
 3. **`FlagPreservationPolicy`의 계층 위반** — 도메인 클래스의 `@Transactional`과 영속성 오케스트레이션
+4. **`is_preserved` 컬럼명** — 필드 `autoExpiryExempt`와 어긋나며 실제 의미도 과장돼 있다
 
 ## Background
 
@@ -74,6 +75,32 @@ flag 도메인에서 세 가지를 걷어낸다.
 남기는 안도 검토했으나(밖에서 호출해도 안전) 영속성 오케스트레이션을 도메인에서
 빼는 쪽을 택했다.
 
+### `is_preserved` 컬럼을 `auto_expiry_exempt`로 바꾼다 (방향 정정)
+
+처음에는 필드 `autoExpiryExempt`를 `preserved`로 바꿔 컬럼·클래스에 맞추려 했다.
+**반대가 맞다.** 이 필드의 유일한 효과는 자동 만료 스윕에서 빠지는 것뿐이다.
+
+```java
+// FlagJpaRepository — 유일한 소비처
+@Query("UPDATE Flag f SET f.deletedAt = :now WHERE f.schedule.endDateTime < :threshold " +
+       "AND f.autoExpiryExempt = false AND f.deletedAt IS NULL")
+```
+
+호스트가 직접 삭제하면 그대로 삭제되고(`closeFlag`가 이 값을 보지 않는다), 소프트 삭제 후
+퍼지도 그대로 된다. "보존"이 아니라 "자동 만료 면제"이므로 `is_preserved`가 과장된 이름이다.
+
+task-99에서 배치 어휘를 `expire`로 통일했으므로 컬럼까지 맞추면 자동 만료 이야기 전체가
+한 단어를 쓴다.
+
+```
+FlagExpiryScheduler → FlagExpiryService.expireEndedFlags()
+                        └ WHERE auto_expiry_exempt = false
+FlagExpiryExemptionPolicy → flag.updateAutoExpiryExempt(...)
+```
+
+`FlagPreservationPolicy`도 `FlagExpiryExemptionPolicy`로 바꾼다. 안 바꾸면 이 클래스만
+"preservation"을 쓰는 마지막 outlier로 남는다.
+
 ### `FlagParticipant`의 널 검사는 raw 예외로 둔다
 
 `flagId`·`participantId` 널은 사용자 입력이 아니라 프로그래밍 오류다.
@@ -94,6 +121,60 @@ URL 변경 때문에 이미 FE와의 배포 조율이 필요하고, 이 작업�
 같은 릴리스에 묶는 편이 조율 횟수를 줄인다.
 WORKFLOW의 `main` 분기 규칙에서 벗어나는 부분이며 사용자 승인을 받았다.
 
+## 배포 전 필수 작업
+
+**flag 브랜치(`ai/refactor-flag-controller-url-ownership`, 25+커밋) 전체의 배포 체크리스트다.**
+task-97·98·99의 결과가 모두 여기에 모인다.
+
+### 1. DDL — 배포보다 먼저 실행해야 한다
+
+```sql
+-- (a) is_preserved 리네임. 데이터를 들고 이름만 바꾼다
+ALTER TABLE flags CHANGE is_preserved auto_expiry_exempt BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- (b) 죽은 초대 컬럼 제거
+ALTER TABLE flag_invitations DROP COLUMN status;
+ALTER TABLE flag_invitations DROP COLUMN expires_at;
+```
+
+**순서를 틀리면 실패 양상이 다르다.**
+
+| | 배포가 먼저 갔을 때 |
+|---|---|
+| (a) `is_preserved` | **조용한 데이터 손실.** `ddl-auto: update`가 `auto_expiry_exempt`를 새로 만들어 전부 `false`로 채운다. 옛 값은 옛 컬럼에 남고 아무도 보지 않는다 |
+| (b) `flag_invitations.status` | **INSERT 실패.** `NOT NULL`인데 DEFAULT가 없어 초대 생성이 터진다 |
+
+(a)가 더 위험하다. `FlagExpiryExemptionPolicy.refresh`는 이벤트로만 돌고 주기적으로
+재계산하지 않으므로, 한 번 `false`가 되면 되돌아오지 않는다. 6시간 뒤 자동 만료 스윕이
+**후기·앵코르가 달린 플래그를 소프트 삭제**하고 12시간 뒤 퍼지가 영구 삭제한다.
+
+### 2. 퍼지 버그로 쌓인 잔여 행 정리 (선택)
+
+task-98에서 고친 버그(`hardDeleteByIdsIn`이 `@SQLRestriction` 때문에 Flag를 한 건도
+지우지 못했다) 때문에 소프트 삭제된 `flags` 행이 누적돼 있다. 자식은 이미 지워졌고
+행만 남은 상태다.
+
+```sql
+DELETE FROM flags WHERE deleted_at IS NOT NULL;
+```
+
+배포 후 배치가 하루 5000건씩 치우므로 그대로 둬도 되지만, 누적량이 많으면 며칠 걸린다.
+
+### 3. 프론트엔드 — BE와 같은 릴리스에 올려야 한다
+
+URL 변경 10곳. 목록은 `git show 82d5d95:PLAN.md`의 「FE 대응 목록」에 있다.
+어긋나면 그 사이 해당 조작이 404다.
+
+### 4. 응답 코드 변경 확인
+
+| 경로 | 변경 |
+|---|---|
+| Comment 501자 작성·수정 | `500` → `400` |
+| 모집 종료 후 탈퇴 | `500` → `409` |
+| 만료된 초대 수락 | `409` 유지, `error` 필드가 `FlagInvitationExpiredException` → `FlagDeadlinePassedException` |
+
+FE가 예외 이름으로 분기 중이면 마지막 항목에 영향이 있다.
+
 ## 알려진 제약
 
 ### 응답이 바뀌는 지점
@@ -112,9 +193,6 @@ Testcontainers 통합 테스트가 필요하다. 이번 작업에서 유일하�
 ## Out of Scope
 
 - **URL 구조** — 같은 브랜치의 앞선 커밋 6개에서 완료
-- **`autoExpiryExempt` 필드명 / `is_preserved` 컬럼명 통일** — 컬럼 변경은
-  `ddl-auto: update`가 새 컬럼을 만들고 옛 컬럼을 남기므로 데이터 마이그레이션이 필요하다.
-  사용자가 별도 작업으로 처리한다.
 - **`GlobalExceptionHandler`의 나머지 캐치올 누수** — `HttpMediaTypeNotSupportedException`(415),
   `MethodArgumentTypeMismatchException`(400) 등이 여전히 500이다.
   전면 해결은 `ResponseEntityExceptionHandler` 상속인데 응답이 `ProblemDetail`로 바뀌어

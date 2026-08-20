@@ -1,7 +1,7 @@
 package com.example.DunbarHorizon.flag.application.eventListener;
 
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
-import com.example.DunbarHorizon.flag.domain.flag.FlagPreservationPolicy;
+import com.example.DunbarHorizon.flag.domain.flag.FlagExpiryExemptionPolicy;
 import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
 import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagDeletedEvent;
@@ -30,7 +30,7 @@ class FlagDeletionEventListenerTest {
     private FlagDeletionEventListener listener;
 
     @Mock private FlagRepository flagRepository;
-    @Mock private FlagPreservationPolicy flagPreservationPolicy;
+    @Mock private FlagExpiryExemptionPolicy flagExpiryExemptionPolicy;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private static final Long FLAG_ID = 1L;
@@ -79,7 +79,7 @@ class FlagDeletionEventListenerTest {
 
     @Test
     @DisplayName("parentId가 있으면 부모 Flag의 보존 상태 재계산을 시도한다")
-    void handleFlagDeletion_updatesParentPreservation() {
+    void handleFlagDeletion_refreshesParentExemption() {
         // given
         Long parentId = 99L;
         FlagDeletedEvent event = endedEventWithParent(parentId);
@@ -91,6 +91,6 @@ class FlagDeletionEventListenerTest {
         listener.handleFlagDeletion(event);
 
         // then
-        verify(flagPreservationPolicy).refresh(parentId);
+        verify(flagExpiryExemptionPolicy).refresh(parentId);
     }
 }

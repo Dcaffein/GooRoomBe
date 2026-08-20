@@ -43,7 +43,7 @@ public class FlagSeedService {
                 INSERT INTO flags
                   (host_id, title, description, capacity,
                    deadline, start_date_time, end_date_time,
-                   group_id, parent_id, is_preserved, created_at, updated_at)
+                   group_id, parent_id, auto_expiry_exempt, created_at, updated_at)
                 VALUES (?, ?, NULL, ?, ?, ?, ?, UNHEX(REPLACE(?, '-', '')), NULL, false, NOW(), NOW())
                 """;
 

@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class FlagPreservationPolicy {
+public class FlagExpiryExemptionPolicy {
 
     private final FlagRepository flagRepository;
     private final FlagMemorialRepository memorialRepository;
@@ -16,8 +16,9 @@ public class FlagPreservationPolicy {
     public void refresh(Long flagId) {
         Flag flag = flagRepository.findById(flagId)
                 .orElseThrow(() -> new FlagNotFoundException(flagId));
-        boolean isPreserved = memorialRepository.existsByFlagId(flagId)
-                           || flagRepository.existsByParentId(flagId);
-        flag.updateAutoExpiryExempt(isPreserved);
+        // 후기나 앵코르가 달린 Flag는 자동 만료 스윕에서 뺀다.
+        boolean exempt = memorialRepository.existsByFlagId(flagId)
+                      || flagRepository.existsByParentId(flagId);
+        flag.updateAutoExpiryExempt(exempt);
     }
 }

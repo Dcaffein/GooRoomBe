@@ -1,6 +1,6 @@
 package com.example.DunbarHorizon.flag.application.eventListener;
 
-import com.example.DunbarHorizon.flag.domain.flag.FlagPreservationPolicy;
+import com.example.DunbarHorizon.flag.domain.flag.FlagExpiryExemptionPolicy;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagEncoreEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -11,10 +11,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class FlagEncoreEventListener {
 
-    private final FlagPreservationPolicy flagPreservationPolicy;
+    private final FlagExpiryExemptionPolicy flagExpiryExemptionPolicy;
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleEncoreCreated(FlagEncoreEvent event) {
-        flagPreservationPolicy.refresh(event.parentFlagId());
+        flagExpiryExemptionPolicy.refresh(event.parentFlagId());
     }
 }
