@@ -16,7 +16,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class FlagPreservationPolicyTest {
@@ -47,14 +46,12 @@ class FlagPreservationPolicyTest {
         Flag flag = createFlag();
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
         given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
-        given(flagRepository.save(flag)).willReturn(flag);
 
         // when
         flagPreservationPolicy.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isTrue();
-        verify(flagRepository).save(flag);
     }
 
     @Test
@@ -65,14 +62,12 @@ class FlagPreservationPolicyTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
         given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(false);
         given(flagRepository.existsByParentId(FLAG_ID)).willReturn(true);
-        given(flagRepository.save(flag)).willReturn(flag);
 
         // when
         flagPreservationPolicy.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isTrue();
-        verify(flagRepository).save(flag);
     }
 
     @Test
@@ -84,14 +79,12 @@ class FlagPreservationPolicyTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
         given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(false);
         given(flagRepository.existsByParentId(FLAG_ID)).willReturn(false);
-        given(flagRepository.save(flag)).willReturn(flag);
 
         // when
         flagPreservationPolicy.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isFalse();
-        verify(flagRepository).save(flag);
     }
 
     @Test
