@@ -26,7 +26,7 @@ class FlagInvitationJpaRepositoryTest {
     private static final Long OTHER_USER_ID = 30L;
 
     private FlagInvitation save(Long flagId, Long inviterId, Long inviteeId) {
-        FlagInvitation inv = FlagInvitation.create(flagId, inviterId, inviteeId, LocalDateTime.now().plusHours(24));
+        FlagInvitation inv = FlagInvitation.create(flagId, inviterId, inviteeId);
         em.persist(inv);
         return inv;
     }

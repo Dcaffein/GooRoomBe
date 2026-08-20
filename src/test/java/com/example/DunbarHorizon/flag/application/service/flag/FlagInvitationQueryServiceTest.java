@@ -40,7 +40,7 @@ class FlagInvitationQueryServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.now();
 
     private FlagInvitation buildInvitation(Long id) {
-        FlagInvitation inv = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(24));
+        FlagInvitation inv = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(inv, "id", id);
         ReflectionTestUtils.setField(inv, "createdAt", NOW);
         return inv;

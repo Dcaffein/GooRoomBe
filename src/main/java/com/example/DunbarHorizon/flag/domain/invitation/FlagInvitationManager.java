@@ -66,7 +66,7 @@ public class FlagInvitationManager {
             throw new FlagInvitationDuplicateException(flagId, inviteeId);
         }
 
-        return FlagInvitation.create(flagId, inviterId, inviteeId, flag.getSchedule().getDeadline());
+        return FlagInvitation.create(flagId, inviterId, inviteeId);
     }
 
     public FlagParticipant accept(Long invitationId, Long acceptorId) {

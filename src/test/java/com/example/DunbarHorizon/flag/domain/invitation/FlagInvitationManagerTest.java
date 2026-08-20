@@ -6,11 +6,11 @@ import com.example.DunbarHorizon.flag.domain.flag.FlagParticipationManager;
 import static org.mockito.Mockito.mock;
 import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagAuthorizationException;
+import com.example.DunbarHorizon.flag.domain.flag.exception.FlagDeadlinePassedException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagParticipationDuplicateException;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import com.example.DunbarHorizon.flag.domain.invitation.exception.FlagInvitationAccessException;
 import com.example.DunbarHorizon.flag.domain.invitation.exception.FlagInvitationDuplicateException;
-import com.example.DunbarHorizon.flag.domain.invitation.exception.FlagInvitationExpiredException;
 import com.example.DunbarHorizon.flag.domain.invitation.repository.FlagInvitationRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -203,7 +203,7 @@ class FlagInvitationManagerTest {
     @DisplayName("초대받은 사람이 수락하면 FlagParticipant가 생성된다")
     void accept_Success() {
         // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(invitation, "id", 10L);
 
         FlagParticipant participant = mock(FlagParticipant.class);
@@ -223,7 +223,7 @@ class FlagInvitationManagerTest {
     @DisplayName("초대 수락 시 이미 참여 중이면 FlagParticipationDuplicateException이 발생한다")
     void accept_AlreadyParticipating_Throws() {
         // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(invitation, "id", 10L);
 
         given(invitationRepository.findById(10L)).willReturn(Optional.of(invitation));
@@ -236,24 +236,26 @@ class FlagInvitationManagerTest {
     }
 
     @Test
-    @DisplayName("만료된 초대를 수락하면 FlagInvitationExpiredException이 발생한다")
-    void accept_Expired_Throws() {
-        // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.minusSeconds(1));
+    @DisplayName("모집이 끝난 Flag의 초대를 수락하면 FlagDeadlinePassedException이 전파된다")
+    void accept_RecruitmentClosed_Throws() {
+        // given — 만료 판정은 Flag.participate()의 isRecruiting()이 수행한다
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(invitation, "id", 10L);
 
         given(invitationRepository.findById(10L)).willReturn(Optional.of(invitation));
+        given(flagParticipationManager.participateByInvitation(FLAG_ID, INVITEE_ID))
+                .willThrow(new FlagDeadlinePassedException());
 
         // when / then
         assertThatThrownBy(() -> policy.accept(10L, INVITEE_ID))
-                .isInstanceOf(FlagInvitationExpiredException.class);
+                .isInstanceOf(FlagDeadlinePassedException.class);
     }
 
     @Test
     @DisplayName("초대받지 않은 사람이 수락하면 FlagInvitationAccessException이 발생한다")
     void accept_NotInvitee_Throws() {
         // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(invitation, "id", 10L);
 
         given(invitationRepository.findById(10L)).willReturn(Optional.of(invitation));
@@ -270,7 +272,7 @@ class FlagInvitationManagerTest {
     @DisplayName("초대받은 사람이 거절하면 검증을 통과한다")
     void reject_Success() {
         // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(invitation, "id", 10L);
 
         given(invitationRepository.findById(10L)).willReturn(Optional.of(invitation));
@@ -285,7 +287,7 @@ class FlagInvitationManagerTest {
     @DisplayName("초대를 보낸 사람이 PENDING 초대를 취소할 수 있다")
     void cancel_Success() {
         // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(invitation, "id", 10L);
 
         given(invitationRepository.findById(10L)).willReturn(Optional.of(invitation));
@@ -298,7 +300,7 @@ class FlagInvitationManagerTest {
     @DisplayName("초대를 보내지 않은 사람이 취소하면 FlagInvitationAccessException이 발생한다")
     void cancel_NotInviter_Throws() {
         // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(invitation, "id", 10L);
 
         given(invitationRepository.findById(10L)).willReturn(Optional.of(invitation));

@@ -44,9 +44,7 @@ public class FlagEncoreInvitationListener {
                 .filter(id -> !id.equals(event.hostId()))
                 .filter(id -> !alreadyInvited.contains(id))
                 .filter(id -> !alreadyParticipating.contains(id))
-                .map(id -> FlagInvitation.create(
-                        encoreFlag.getId(), event.hostId(), id,
-                        encoreFlag.getSchedule().getDeadline()))
+                .map(id -> FlagInvitation.create(encoreFlag.getId(), event.hostId(), id))
                 .toList();
 
         if (invitations.isEmpty()) return;

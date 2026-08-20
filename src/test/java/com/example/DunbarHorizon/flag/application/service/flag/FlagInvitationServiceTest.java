@@ -47,8 +47,8 @@ class FlagInvitationServiceTest {
     @DisplayName("초대 생성 시 Manager에 위임하고 저장 후 이벤트를 발행한다")
     void invite_DelegatesToPolicyAndPublishesEvent() {
         // given
-        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
-        FlagInvitation savedInvitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID, NOW.plusHours(2));
+        FlagInvitation invitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
+        FlagInvitation savedInvitation = FlagInvitation.create(FLAG_ID, INVITER_ID, INVITEE_ID);
         ReflectionTestUtils.setField(savedInvitation, "id", 10L);
 
         FlagSchedule schedule = FlagSchedule.of(NOW.plusHours(2), NOW.plusHours(3), NOW.plusHours(4));
