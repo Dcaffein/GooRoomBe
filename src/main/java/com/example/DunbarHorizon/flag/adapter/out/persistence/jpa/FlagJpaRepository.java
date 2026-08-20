@@ -42,13 +42,12 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
     @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.deadline > :asOf")
     List<Flag> findByHostIdsAndDeadlineAfter(@Param("hostIds") Collection<Long> hostIds, @Param("asOf") LocalDateTime asOf);
 
-    @Query(value = "SELECT id FROM flags WHERE deleted_at < :bufferTime LIMIT 5000",
+    // Flag의 @SQLRestriction("deleted_at IS NULL")이 JPQL에 적용되어 찾으려는 소프트 삭제 행을
+    // 정확히 걸러내므로 네이티브 쿼리로 우회한다.
+    @Query(value = "SELECT id FROM flags WHERE deleted_at < :bufferTime LIMIT :batchSize",
            nativeQuery = true)
-    List<Long> _findIdsInternal(@Param("bufferTime") LocalDateTime bufferTime);
-
-    default List<Long> findIdsByDeletedAtBefore(LocalDateTime bufferTime) {
-        return _findIdsInternal(bufferTime);
-    }
+    List<Long> findIdsByDeletedAtBefore(@Param("bufferTime") LocalDateTime bufferTime,
+                                        @Param("batchSize") int batchSize);
 
     @Query("SELECT f FROM Flag f " +
            "WHERE f.hostId = :userId " +

@@ -5,6 +5,6 @@ import java.util.Collection;
 import java.util.List;
 
 public interface FlagMaintenancePort {
-    List<Long> findIdsReadyForHardDelete(LocalDateTime bufferTime);
+    List<Long> findIdsReadyForHardDelete(LocalDateTime bufferTime, int batchSize);
     void purgeFlagsAndRelatedData(Collection<Long> flagIds);
 }

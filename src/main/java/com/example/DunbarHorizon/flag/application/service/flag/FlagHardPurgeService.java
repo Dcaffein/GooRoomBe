@@ -13,12 +13,15 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FlagHardPurgeService {
 
+    private static final int BUFFER_HOURS = 12;
+    private static final int BATCH_SIZE = 5000;
+
     private final FlagMaintenancePort maintenancePort;
 
     public void sweepExpiredData() {
-        LocalDateTime bufferTime = LocalDateTime.now().minusHours(12);
+        LocalDateTime bufferTime = LocalDateTime.now().minusHours(BUFFER_HOURS);
 
-        List<Long> targets = maintenancePort.findIdsReadyForHardDelete(bufferTime);
+        List<Long> targets = maintenancePort.findIdsReadyForHardDelete(bufferTime, BATCH_SIZE);
 
         if (!targets.isEmpty()) {
             maintenancePort.purgeFlagsAndRelatedData(targets);

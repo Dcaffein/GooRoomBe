@@ -24,22 +24,22 @@ public class FlagMaintenanceAdapter implements FlagMaintenancePort {
     private static final int CHUNK_SIZE = 500;
 
     private final FlagJpaRepository flagJpaRepository;
-    private final FlagParticipantJpaRepository participantRepositoryAdapter;
-    private final FlagMemorialJpaRepository memorialRepositoryAdapter;
-    private final FlagCommentJpaRepository commentRepositoryAdapter;
+    private final FlagParticipantJpaRepository participantJpaRepository;
+    private final FlagMemorialJpaRepository memorialJpaRepository;
+    private final FlagCommentJpaRepository commentJpaRepository;
     private final FlagInvitationJpaRepository invitationJpaRepository;
     private final TransactionTemplate chunkTransaction;
 
     public FlagMaintenanceAdapter(FlagJpaRepository flagJpaRepository,
-                                  FlagParticipantJpaRepository participantRepositoryAdapter,
-                                  FlagMemorialJpaRepository memorialRepositoryAdapter,
-                                  FlagCommentJpaRepository commentRepositoryAdapter,
+                                  FlagParticipantJpaRepository participantJpaRepository,
+                                  FlagMemorialJpaRepository memorialJpaRepository,
+                                  FlagCommentJpaRepository commentJpaRepository,
                                   FlagInvitationJpaRepository invitationJpaRepository,
                                   PlatformTransactionManager transactionManager) {
         this.flagJpaRepository = flagJpaRepository;
-        this.participantRepositoryAdapter = participantRepositoryAdapter;
-        this.memorialRepositoryAdapter = memorialRepositoryAdapter;
-        this.commentRepositoryAdapter = commentRepositoryAdapter;
+        this.participantJpaRepository = participantJpaRepository;
+        this.memorialJpaRepository = memorialJpaRepository;
+        this.commentJpaRepository = commentJpaRepository;
         this.invitationJpaRepository = invitationJpaRepository;
 
         // 청크마다 독립 트랜잭션을 연다. 기본 전파(REQUIRED)면 호출자가 트랜잭션을 열고 있을 때
@@ -49,8 +49,8 @@ public class FlagMaintenanceAdapter implements FlagMaintenancePort {
     }
 
     @Override
-    public List<Long> findIdsReadyForHardDelete(LocalDateTime bufferTime) {
-        return flagJpaRepository.findIdsByDeletedAtBefore(bufferTime);
+    public List<Long> findIdsReadyForHardDelete(LocalDateTime bufferTime, int batchSize) {
+        return flagJpaRepository.findIdsByDeletedAtBefore(bufferTime, batchSize);
     }
 
     @Override
@@ -62,9 +62,9 @@ public class FlagMaintenanceAdapter implements FlagMaintenancePort {
             List<Long> chunk = idList.subList(i, end);
 
             chunkTransaction.execute(status -> {
-                participantRepositoryAdapter.hardDeleteByFlagIdsIn(chunk);
-                memorialRepositoryAdapter.hardDeleteByFlagIdsIn(chunk);
-                commentRepositoryAdapter.hardDeleteByFlagIdsIn(chunk);
+                participantJpaRepository.hardDeleteByFlagIdsIn(chunk);
+                memorialJpaRepository.hardDeleteByFlagIdsIn(chunk);
+                commentJpaRepository.hardDeleteByFlagIdsIn(chunk);
                 invitationJpaRepository.hardDeleteByFlagIdsIn(chunk);
                 flagJpaRepository.hardDeleteByIdsIn(chunk);
                 return null;
