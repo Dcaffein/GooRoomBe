@@ -1,373 +1,307 @@
-# PLAN — flag 저장소 계층 정리
+# PLAN — flag 서비스 계층 정리
 
 ## 작업 목표
 
-포트 4개, 어댑터 5개, JPA 리포지토리 5개에서 무력화된 트랜잭션 분리, 자식 수명 불일치,
-죽은 코드, 과다 조회, 이름 불일치를 정리하고 테스트 공백을 채운다. API 표면은 무변경이다.
+flag 애플리케이션 계층(서비스 12, 리스너 6)에서 잠금 순서 결함 1건, 과다 쿼리 1건,
+거짓 분기 1건, 잉여 코드 1건, 패키지·이름 불일치 2건을 정리하고 테스트 공백 하나를 채운다. API 표면은 무변경이다.
 
-`ai/refactor-flag-controller-url-ownership`(URL 6 + 도메인 5 커밋)에 이어서 쌓는다.
+`ai/refactor-flag-controller-url-ownership`(URL 6 + 도메인 5 + 저장소 8 + docs 1)에 이어서 쌓는다.
 
-**도메인 수정 승인 요청** — 포트가 도메인 패키지에 있어 아래 두 파일을 수정한다.
-엔티티·규칙은 무변경이다.
-
-- `domain/flag/repository/FlagRepository.java` — `existsById`·`deleteAllParticipants` 삭제,
-  `findByIdExclusive` 리네임
-- `domain/invitation/repository/FlagInvitationRepository.java` — `hardDeleteByFlagIdsIn` 삭제
+**도메인 수정 없음.** 엔티티·도메인 서비스를 건드리지 않는다. 포트는 2번에서 죽는 메서드 하나만 지운다.
 
 ---
 
-## 1. 퍼지의 청크별 트랜잭션 분리가 무력화돼 있다
+## 1. `modifyFlagCapacity`가 잠금 밖에서 센 값을 쓴다
 
 ### 문제
 
 ```java
-// FlagHardPurgeService:19
-@Transactional
-public void sweepExpiredData() { ... maintenancePort.purgeFlagsAndRelatedData(targets); }
-
-// FlagMaintenanceAdapter:45 — 500건씩 끊어 별도 트랜잭션을 의도
-transactionTemplate.execute(status -> { ...5개 테이블 삭제... });
+// FlagManagementService:29-32
+int currentCount = flagRepository.countParticipants(command.flagId());   // 잠금 전에 센다
+Flag flag = flagRepository.findByIdForUpdate(command.flagId())           // 그 다음 잠근다
+        .orElseThrow(() -> new FlagNotFoundException(command.flagId()));
+flag.updateCapacity(command.hostId(), command.capacity(), currentCount);
 ```
 
-`TransactionTemplate`의 기본 전파는 `REQUIRED`다. 호출자가 이미 트랜잭션을 열었으므로
-**청크마다 바깥 트랜잭션에 합류한다.** 최대 5000건 × 5테이블 삭제가 트랜잭션 하나에서
-일어나며, `transactionTemplate`을 주입한 목적이 달성되지 않는다.
+같은 Flag 행을 잠그는 참여 경로는 순서가 반대다.
+
+```java
+// FlagParticipationManager:25-31 — 잠그고 나서 센다
+Flag lockedFlag = flagRepository.findByIdForUpdate(flagId).orElseThrow(...);
+int count = flagRepository.countParticipants(flagId);
+return lockedFlag.participate(userId, count);
+```
+
+두 경로는 잠금으로 직렬화되지만, 정원 변경 쪽이 잠금 밖에서 읽은 값을 들고 들어간다.
+
+```
+T1(정원변경)  countParticipants → 5
+T2(참여)      잠금 획득 → count=5, capacity=10 → 참여 → 6명, 커밋
+T1            잠금 획득 → updateCapacity(newCapacity=5, currentCount=5)
+              검증: newCapacity < currentCount → 5 < 5 → false → 통과
+              결과: 참여자 6명, 정원 5
+```
 
 ### 방향
 
-둘을 함께 바꿔야 한다. 하나만으로는 의도가 서지 않는다.
+`countParticipants`를 잠금 뒤로 옮긴다.
 
 ```java
-// FlagHardPurgeService — @Transactional 제거
-public void sweepExpiredData() { ... }
-
-// FlagMaintenanceAdapter — 전파를 명시
-transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+Flag flag = flagRepository.findByIdForUpdate(command.flagId())
+        .orElseThrow(() -> new FlagNotFoundException(command.flagId()));
+int currentCount = flagRepository.countParticipants(command.flagId());
+flag.updateCapacity(command.hostId(), command.capacity(), currentCount);
 ```
 
-`REQUIRES_NEW`를 명시하면 호출자가 나중에 다시 `@Transactional`을 붙여도 청크 분리가
-유지된다. `@Transactional` 제거만으로는 그 보호가 없다.
-
-### 영향 — 동작 변화
-
-지금은 중간 실패 시 전부 롤백된다. 변경 후에는 성공한 청크가 남는다.
-퍼지는 멱등하므로(이미 지워진 id는 다음 실행에서 조회되지 않는다) 부분 성공이 안전하며,
-대량 삭제가 하나의 롱 트랜잭션이 되는 것을 막는다.
+저장소 작업의 `participateByInvitation` 교정과 같은 성격이다.
 
 ---
 
-## 2. 참여자만 자식 수명 규칙에서 벗어나 있다
+## 2. `getMemorials`가 쿼리 5개를 쏜다
 
 ### 문제
 
-이 도메인의 삭제 전략은 **부하 분산**이다. 사용자 삭제와 자동 만료는 Flag에 `deleted_at`만
-기록하고(가벼운 UPDATE), 무거운 다중 테이블 정리는 널널한 주기의 배치로 미룬다.
-
+```java
+// FlagMemorialQueryService:31-44
+findHostIdById              1
+isParticipating             2
+existsByFlagId              3     ← 없으면 empty()
+existsByFlagIdAndWriterId   4     ← 내가 안 썼으면 asLocked()
+findAllByFlagId             5
 ```
-FlagLabelingScheduler   0 0 0/6 * * *   6시간마다   soft delete
-FlagSweepingScheduler   0 0 3 * * *     하루 1회    hard delete + 자식 청소
-```
 
-참여자만 이 규칙에서 빠져 **두 번 삭제된다.**
+`MemorialListResult.asLocked()`는 `List.of()`를 돌려준다. 즉 3·4는 5가 이미 가진 정보를
+두 번 더 물어보는 것이다.
+
+### 방향
+
+한 번 로드하고 메모리에서 가른다. 5개 → 3개.
 
 ```java
-// FlagDeletionEventListener:58 — 삭제 직후 즉시
-flagRepository.deleteAllParticipants(event.flagId());
-
-// FlagMaintenanceAdapter:46 — 3시 배치에서 다시
-participantRepositoryAdapter.hardDeleteByFlagIdsIn(chunk);
+List<FlagMemorial> memorials = memorialRepository.findAllByFlagId(flagId);
+if (memorials.isEmpty()) return MemorialListResult.empty();
+if (memorials.stream().noneMatch(m -> m.getWriterId().equals(viewerId))) {
+    return MemorialListResult.asLocked();
+}
 ```
 
-게다가 **자동 만료 경로에는 즉시 삭제가 아예 없다.** `expireAllExceedingThreshold`는
-벌크 UPDATE라 엔티티 생명주기를 건너뛰고 `FlagDeletedEvent`가 발행되지 않는다.
+잠긴 경우 몇 행을 헛로드하지만, 한 모임의 후기라 건수가 적어 쿼리 두 개를 줄이는 편이 낫다.
 
-| 삭제 경로 | 참여자 삭제 시점 |
+`existsByFlagIdAndWriterId`는 이 호출부가 유일하므로 포트·어댑터·JPA에서 함께 죽는다.
+`existsByFlagId`는 `FlagPreservationPolicy`가 계속 쓰므로 유지한다.
+
+---
+
+## 3. `invite()`에 도달할 수 없는 거짓 분기가 있다
+
+### 문제
+
+```java
+// FlagInvitationService:32-37
+FlagInvitation invitation = invitationManager.invite(flagId, inviterId, inviteeId);
+//   └ FlagInvitationManager:41 에서 flagRepository.findById(flagId).orElseThrow(...) 로 이미 검증됨
+String flagTitle = flagRepository.findById(flagId)
+        .map(f -> f.getTitle())
+        .orElse("");            // ← 도달할 수 없다
+```
+
+같은 트랜잭션이라 두 번째 조회는 1차 캐시 히트여서 SQL은 나가지 않는다.
+문제는 `.orElse("")`가 "없을 수도 있다"고 말한다는 점이다. 만약 도달하면
+`[] 플래그에 초대받았습니다`라는 알림이 나간다.
+
+### 방향
+
+```java
+String flagTitle = flagRepository.findById(flagId)
+        .map(Flag::getTitle)
+        .orElseThrow(() -> new FlagNotFoundException(flagId));
+```
+
+두 번째 조회 자체를 없애려면 `FlagInvitationManager.invite`의 반환 타입을 바꿔야 하는데,
+캐시 히트라 얻는 것이 없어 하지 않는다.
+
+---
+
+## 4. `occurredAt`을 불필요하게 채운다
+
+### 문제
+
+`NotificationEvent`의 컴팩트 생성자가 기본값을 채운다.
+
+```java
+public NotificationEvent {
+    if (occurredAt == null) occurredAt = LocalDateTime.now();
+```
+
+그런데 리스너마다 다르다.
+
+| 리스너 | `.occurredAt(...)` |
 |---|---|
-| 유저가 직접 삭제 | 즉시 + 배치에서 또 |
-| 스케줄러 자동 만료 | 배치에서만 |
+| `FlagDeletionEventListener` | 명시 |
+| `FlagMeetingChangedEventListener` | 명시 |
+| `FlagInvitationEventListener` | 없음 |
 
-배치만으로 충분하다는 것을 자동 만료 경로가 이미 증명하고 있다.
-
-> 벌크 UPDATE가 이벤트를 건너뛰는 것 자체는 올바르다. 이벤트가 발행됐다면 모임 종료
-> 24시간 뒤에 "모임이 호스트 사정으로 취소되었습니다" 알림이 나갔을 것이다.
+동작은 셋 다 같다. 명시한 쪽이 잉여이며 없는 쪽과 어긋나 보인다.
 
 ### 방향
 
-`FlagDeletionEventListener:58`의 `deleteAllParticipants` 호출을 제거하고 배치가 정리하게 한다.
-남는 메서드는 알림·상호작용 이벤트 발행만 하므로 이름을 바꾼다.
-
-```java
-// processParticipantCleanup → notifyParticipants
-private void notifyParticipants(FlagDeletedEvent event, Long hostId) {
-    List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
-    ...
-}   // deleteAllParticipants 호출 제거
-```
-
-### 안전성 확인
-
-`isParticipating` 호출 6곳 중 5곳은 Flag를 먼저 로드하거나(`findHostIdById`,
-`findByIdExclusive`, `findById`) 이미 로드된 `Flag`를 받으므로 `@SQLRestriction`에 걸러진다.
-`findFlagIdsByParticipantId`는 뒤이은 `findAllByIdIn`에서 걸러진다.
-
-### 함께 — `participateByInvitation`의 검사 순서
-
-```java
-// FlagParticipationManager:36 — isParticipating이 Flag 로드보다 먼저다
-if (flagRepository.isParticipating(flagId, userId)) throw new FlagParticipationDuplicateException(...);
-Flag lockedFlag = flagRepository.findByIdExclusive(flagId).orElseThrow(...);
-```
-
-참여자가 12시간 남게 되면서, **소프트 삭제된 Flag에 이미 참여 중이면서 대기 중인 초대까지
-가진 유저**가 그 초대를 수락하면 `404`가 아니라 `409`가 나간다.
-
-도달하기 매우 어렵다 — `invite()`가 참여자를 초대 대상에서 막으므로
-"초대받음 → 직접 참여 → 초대 미수락 → Flag 삭제 → 초대 수락" 순서여야 하고, 둘 다 에러 응답이다.
-두 줄의 순서를 바꾼다. 잠금을 먼저 잡는 것이 동시성상으로도 맞다.
-
-```java
-Flag lockedFlag = flagRepository.findByIdExclusive(flagId).orElseThrow(...);
-if (flagRepository.isParticipating(flagId, userId)) throw new FlagParticipationDuplicateException(...);
-```
+두 곳에서 `.occurredAt(LocalDateTime.now())`를 제거해 셋을 맞춘다.
 
 ---
 
-## 3. 죽은 포트 메서드 3개
+## 5. 서비스 패키지와 이름 규칙이 어긋난 두 곳
 
 ### 문제
 
-**`FlagRepository.existsById`** — 호출부 0.
+도메인은 네 폴더인데 서비스는 셋이다. `invitation`만 `flag/` 안에 섞여 있다.
 
-**`FlagInvitationRepository.hardDeleteByFlagIdsIn`** — 포트로는 호출되지 않는다.
-`FlagMaintenanceAdapter:49`가 `invitationJpaRepository`(JPA)를 직접 호출한다.
-comment·memorial·participant·flag 포트에는 대응 메서드가 아예 없어, 다섯 중 초대만
-짝 없는 메서드를 갖고 있다.
-
-**`FlagRepository.deleteAllParticipants`** — 2번 적용 시 유일한 호출부가 사라진다.
-어댑터 구현과 `FlagParticipantJpaRepository.deleteAllByFlagId`까지 연쇄로 비어버린다.
-
-### 방향
-
-포트 선언과 어댑터 구현을 삭제한다. `deleteAllByFlagId`(JPA)도 함께 삭제한다.
-`hardDeleteByFlagIdsIn`(JPA)은 `FlagMaintenanceAdapter`가 쓰므로 유지한다.
-
----
-
-## 4. `getFriendFlags`만 과다 조회한다
-
-### 문제
-
-```java
-List<Flag> recruitingFlags = flagRepository.findByHostIdsAndDeadlineAfter(friendIds, now);
-Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(friendIds);  // 친구 전원
+```
+domain/               comment/  flag/  invitation/  memorial/
+application/service/  comment/  flag/               memorial/     ← invitation 없음
 ```
 
-필요한 것은 `recruitingFlags`의 호스트뿐이다. 친구 150명 중 모집 중인 플래그를 가진 사람이
-3명이면 147명분이 낭비된다. 같은 서비스의 `getRecentFlags`·`getHostingFlags`·
-`getParticipatingFlags`는 모두 로드된 플래그에서 호스트를 추린다 — 이 메서드만 다르다.
+이름 규칙도 같은 지점에서 어긋난다. 조회 쪽은 넷 다 `QueryService`로 일관되고
+전부 `@Transactional(readOnly = true)`인데, 명령 쪽만 갈린다.
 
-### 방향
-
-```java
-List<Flag> recruitingFlags = flagRepository.findByHostIdsAndDeadlineAfter(friendIds, LocalDateTime.now());
-if (recruitingFlags.isEmpty()) return List.of();
-
-Set<Long> hostIds = recruitingFlags.stream().map(Flag::getHostId).collect(Collectors.toSet());
-Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(hostIds);
-```
-
-응답은 동일하다. 유저 조회 건수만 줄어든다.
-
----
-
-## 5. 같은 잠금에 두 어휘
-
-### 문제
-
-| 포트 | 메서드 | 구현 |
+| 도메인 | 명령 | 조회 |
 |---|---|---|
-| `FlagRepository` | `findByIdExclusive` | `@Lock(PESSIMISTIC_WRITE)` |
-| `FlagCommentRepository` | `findByIdForUpdate` | `@Lock(PESSIMISTIC_WRITE)` |
+| comment | `FlagCommentCommandService` | `FlagCommentQueryService` |
+| memorial | `FlagMemorialCommandService` | `FlagMemorialQueryService` |
+| invitation | **`FlagInvitationService`** | `FlagInvitationQueryService` |
+| flag | `FlagHostService` · `FlagManagementService` · `FlagParticipationService` | `FlagQueryService` |
+
+`invitation`은 comment·memorial과 같은 CQRS 짝인데 `Command`만 빠져 있다.
+
+**`FlagManagementService`는 서비스 37개 중 유일한 `*ManagementService`다.** 프로젝트의
+다른 서비스는 전부 주제 + 동작으로 이름 짓는다 — `FriendshipDecayService`,
+`FriendshipArchiveService`, `UserOutboxCleanupService`, `FriendRequestReceiverActionService`.
+`Manager` 접미사는 도메인 협력자(`FlagInvitationManager`)와 인프라(`AuthCookieManager`)에만 쓰인다.
 
 ### 방향
 
-`findByIdForUpdate`로 통일한다. SQL `FOR UPDATE`와 직결되어 의미가 명확하고,
-`Exclusive`는 무엇에 대한 배타인지 모호하다. 잠금은 도메인이 의도적으로 요청하는 것이므로
-포트에 드러나는 것이 맞다고 본다.
+폴더를 만들고 두 서비스를 옮기면서 이름을 맞춘다.
 
-호출부 3곳(`FlagManagementService`, `FlagParticipationManager` 2곳)을 함께 바꾼다.
+```
+application/service/invitation/
+├── FlagInvitationCommandService.java   ← flag/FlagInvitationService.java
+└── FlagInvitationQueryService.java     ← flag/FlagInvitationQueryService.java
+```
+
+comment·memorial과 형태가 같아지고, 서비스 폴더가 도메인 폴더를 그대로 미러링한다.
+
+포트 `FlagInvitationUseCase`는 그대로 둔다 — 포트 이름은 컨트롤러가 쓰는 계약이고
+`FlagInvitationQueryUseCase`와 이미 구분된다.
+
+`FlagManagementService` → `FlagModificationService`. 말씀된 축(참여가 아닌 Flag 자체)을
+유지하면서 동작을 말한다. `closeFlag`는 `deleted_at`을 찍는 상태 변경이라 "변경"에 포함된다.
+
+**포트도 함께 바꾼다** — `FlagManagementUseCase` → `FlagModificationUseCase`.
+안 바꾸면 서비스와 포트 이름이 어긋나는 새 불일치가 생긴다.
+영향은 포트·구현·`FlagController` 필드·테스트이며 순수 리네임이다.
+
+최종 형태:
+
+```
+FlagHostService           생성
+FlagModificationService   변경
+FlagParticipationService  참여
+FlagQueryService          조회
+```
+
+### 손대지 않는 것
+
+**flag 명령 서비스를 하나로 합치는 것.** 축이 셋이다 — 생성(Host), 변경(Modification),
+참여(Participation). `FlagCommandService` 하나로 합치면 컨트롤러에서 없앤 CQRS 축을
+서비스에 되살리는 셈이 된다.
+
+**배치·시드 서비스의 위치.** `FlagExpiryService`·`FlagPurgeService`·`FlagSeedService`는
+Flag 애그리거트를 다루므로 `flag/`가 맞다. 별도 폴더로 빼면 도메인에 없는 분류를
+서비스 계층에만 만들게 된다.
 
 ---
 
-## 6. 퍼지 처리량이 JPA 인터페이스에 박혀 있다
+## 6. 배치 두 경로가 자기를 부르는 말이 셋씩이다
 
 ### 문제
 
-```java
-// FlagJpaRepository
-@Query(value = "SELECT id FROM flags WHERE deleted_at < :bufferTime LIMIT 5000", nativeQuery = true)
-List<Long> _findIdsInternal(@Param("bufferTime") LocalDateTime bufferTime);
-
-default List<Long> findIdsByDeletedAtBefore(LocalDateTime bufferTime) {
-    return _findIdsInternal(bufferTime);
-}
-
-// FlagMaintenanceAdapter:39
-int chunkSize = 500;
+```
+FlagLabelingScheduler.runLabeling()  → FlagExpiryService.labelExpiredFlags()   → soft delete
+FlagSweepingScheduler.runSweeping()  → FlagHardPurgeService.sweepExpiredData() → hard delete
 ```
 
-**`5000`이 있어야 할 곳에 없다.** "1회 실행당 처리량 상한"이라는 운영 정책인데 JPA
-인터페이스의 쿼리 문자열에 박혀 있다. 정책 소유자는 `bufferTime`(12시간)을 들고 있는
-`FlagHardPurgeService`다. 조정하려면 JPA 인터페이스를 고쳐야 한다.
+한 경로에 **Labeling / Expiry / label**, 다른 경로에 **Sweeping / HardPurge / sweep**.
+`FlagPreservationPolicy` / `autoExpiryExempt` / `is_preserved`와 같은 어휘 분산이며 더 심하다.
 
-**네이티브를 쓴 이유가 코드에 없다.** `Flag`의 `@SQLRestriction("deleted_at IS NULL")`이
-JPQL에 적용되어 찾으려는 소프트 삭제 행을 정확히 걸러내기 때문이다.
-
-**`_` 접두 래퍼는 잔재다.** 도입 시점(`715cfd0`)에는 JPQL + `Pageable` 형태였고,
-래퍼의 목적은 호출자에게 `PageRequest.of(0, 5000)`을 감추는 것이었다.
-
-```java
-// 715cfd0 시점
-List<Long> _findIdsInternal(@Param("bufferTime") LocalDateTime bufferTime, Pageable pageable);
-default List<Long> findIdsByDeletedAtBefore(LocalDateTime bufferTime) {
-    return _findIdsInternal(bufferTime, PageRequest.of(0, 5000));
-}
-```
-
-이후 네이티브로 바뀌며 `Pageable`이 사라지자 감출 것이 없어졌고 껍데기만 남았다.
-지금은 두 메서드의 시그니처가 같다. `_` 접두 메서드는 프로젝트 전체에서 이것 하나뿐이며,
-인터페이스 메서드는 모두 `public`이라 실제 접근 제한 효과도 없다.
+게다가 어느 이름도 "삭제"라고 말하지 않는다. `labelExpiredFlags`는 라벨을 붙이는 것처럼
+들리지만 실제로는 `deleted_at`을 찍는다.
 
 ### 방향
 
-두 숫자는 성격이 달라 갈 곳이 다르다. 둘 다 호출자가 상수로 들고, 쿼리에는 파라미터로 넘긴다.
-다른 쿼리 메서드와 같은 형태가 된다.
+`expire`(소프트)와 `purge`(하드) 두 단어만 남기고 스케줄러·서비스·메서드를 맞춘다.
 
-| 값 | 의미 | 소유자 |
+| | 현재 | 변경 후 |
 |---|---|---|
-| `5000` | 1회 실행당 처리량 상한 — **운영 정책** | `FlagHardPurgeService` |
-| `500` | 1트랜잭션당 삭제 건수 — **영속성 세부** | `FlagMaintenanceAdapter` |
+| 소프트 삭제 | `FlagLabelingScheduler.runLabeling()` | `FlagExpiryScheduler.runExpiry()` |
+| | `FlagExpiryService.labelExpiredFlags()` | `FlagExpiryService.expireEndedFlags()` |
+| 하드 삭제 | `FlagSweepingScheduler.runSweeping()` | `FlagPurgeScheduler.runPurge()` |
+| | `FlagHardPurgeService.sweepExpiredData()` | `FlagPurgeService.purgeExpiredFlags()` |
 
-```java
-// FlagJpaRepository — 래퍼 제거, 이름 하나, 이유 명시
-// Flag의 @SQLRestriction("deleted_at IS NULL")이 JPQL에 적용되어 대상 행을 걸러내므로
-// 네이티브 쿼리로 우회한다.
-@Query(value = "SELECT id FROM flags WHERE deleted_at < :bufferTime LIMIT :batchSize", nativeQuery = true)
-List<Long> findIdsByDeletedAtBefore(@Param("bufferTime") LocalDateTime bufferTime,
-                                    @Param("batchSize") int batchSize);
+포트의 `purgeFlagsAndRelatedData`·`findIdsReadyForHardDelete`가 이미 purge/hardDelete를
+쓰고 있어 하드 삭제 쪽 어휘가 맞아떨어진다.
 
-// FlagMaintenancePort
-List<Long> findIdsReadyForHardDelete(LocalDateTime bufferTime, int batchSize);
+`FlagExpiryService`의 로그 문구("시스템 자동 만료 처리 완료: {}건의 플래그에 deletedAt 기록")도
+새 어휘에 맞춰 다듬는다.
 
-// FlagHardPurgeService
-private static final int BUFFER_HOURS = 12;
-private static final int BATCH_SIZE = 5000;
-
-// FlagMaintenanceAdapter — 지역 변수를 상수로
-private static final int CHUNK_SIZE = 500;
-```
-
-`application.yml`은 건드리지 않는다. 운영에서 이 값을 조정해야 했던 적이 없고,
-하루 한 번 도는 배치라 설정 표면을 늘릴 근거가 없다.
-
-### 알아둘 것 — 처리량 천장
-
-소프트 삭제는 6시간마다, 하드 삭제는 하루 1회 최대 5000건이다.
-**하루 소프트 삭제가 5000건을 넘으면 잔여분이 누적되어 따라잡지 못한다.**
-현재 규모에선 무관하나, `BATCH_SIZE`를 서비스 상수로 올리면 조정 지점이 한곳에 생긴다.
+7번에서 만드는 테스트는 `FlagPurgeServiceTest`로 이름을 맞춘다.
 
 ---
 
-## 7. `FlagMaintenanceAdapter` 필드명이 타입과 어긋난다
-
-### 문제
-
-```java
-private final FlagParticipantJpaRepository participantRepositoryAdapter;   // JPA인데 Adapter
-private final FlagMemorialJpaRepository    memorialRepositoryAdapter;
-private final FlagCommentJpaRepository     commentRepositoryAdapter;
-private final FlagInvitationJpaRepository  invitationJpaRepository;         // 이것만 정확
-```
-
-계층 위반은 아니다. `FlagMaintenancePort`를 구현하는 정상 어댑터이며 어댑터가 JPA를
-직접 쓰는 것은 맞다. 이름만 오해를 부른다.
-
-### 방향
-
-`participantJpaRepository`, `memorialJpaRepository`, `commentJpaRepository`로 바꾼다.
-
----
-
-## 8. 저장소 계층 테스트 공백
+## 7. 테스트 공백
 
 ### 문제
 
 | 클래스 | 테스트 |
 |---|---|
-| `FlagJpaRepository` | 4건 |
-| `FlagInvitationJpaRepository` | 5건 |
-| `FlagParticipantJpaRepository` | 없음 |
-| `FlagCommentJpaRepository` | 없음 |
-| `FlagMemorialJpaRepository` | 없음 |
-| `FlagMaintenanceAdapter` | 없음 |
+| `FlagHardPurgeService` (→ `FlagPurgeService`) | 없음 |
+| `FlagMeetingChangedEventListener` | 없음 |
+| `FlagMemorialEventListener` | 없음 |
+| `FlagEncoreEventListener` | 없음 |
 
-`FlagMaintenanceAdapter`가 가장 위험하다. `hardDeleteByIdsIn`은 JPQL bulk delete이고
-`@SQLRestriction`이 bulk 문에 적용되지 않는다는 Hibernate 동작에 기대고 있다.
-이 가정이 틀리면 **퍼지가 조용히 아무것도 지우지 않는다.**
+나머지 14개는 2~15건씩 있다.
 
 ### 방향
 
-신규 4개 모두 Testcontainers가 필요하다.
+**`FlagPurgeService`(6번에서 리네임)만 채운다.** 저장소 작업에서 `@Transactional`을 떼어낸 곳이라
+호출 계약을 고정해둘 값이 있다. mock 기반이라 빠르다.
 
-**`FlagMaintenanceAdapterTest`** — 가장 중요하다.
-- 소프트 삭제된 Flag와 하위 데이터(참여자·댓글·추모글·초대)를 심고
-  `purgeFlagsAndRelatedData` 후 다섯 테이블에서 모두 사라지는지
-- **2번 적용 후 참여자가 배치에서 실제로 지워지는지** — 즉시 삭제를 제거하므로
-  이 경로가 유일한 정리 수단이 된다
-- `findIdsReadyForHardDelete`가 `deleted_at IS NULL` 행은 반환하지 않고
-  버퍼 이전에 삭제된 행만 반환하는지
+- 대상이 비어 있으면 `purgeFlagsAndRelatedData`를 부르지 않는지
+- `bufferTime`과 `BATCH_SIZE`를 포트에 정확히 넘기는지
 
-**`FlagParticipantJpaRepositoryTest`** — `countByFlagIdIn` 프로젝션이 flagId별 집계를
-정확히 돌려주는지, 참여자 없는 flagId가 결과에서 빠지는지(호출부가 `getOrDefault(id, 0)`에
-의존한다).
-
-**`FlagCommentJpaRepositoryTest`** — `deleteTargetAndReplies`가 대상과 답글을 함께 지우고
-다른 댓글은 남기는지.
-
-**`FlagMemorialJpaRepositoryTest`** — `existsByFlagIdAndWriterId` 조합 조건.
+나머지 세 리스너는 위임 한 줄짜리라 넣지 않는다.
 
 ---
 
 ## 손대지 않는 것
 
-### 삭제 전략 자체
+### 트랜잭션 경계
 
-소프트 삭제 → 지연 하드 삭제는 **부하 분산 목적으로 타당하다.** 사용자 삭제는 가벼운
-UPDATE 하나로 끝내고, 무거운 다중 테이블 정리를 4배 널널한 주기의 배치로 미룬다.
-복구는 애초에 목표가 아니므로 자식을 하드 삭제하는 것도 일관된다.
+조회 서비스는 전부 `@Transactional(readOnly = true)`, 명령 서비스는 `@Transactional`.
+리스너 넷은 모두 `AFTER_COMMIT` + `REQUIRES_NEW`로 형태가 같다. 일관돼 있다.
 
-12시간 창 동안 데이터가 새지 않는 것도 확인했다 — `FlagCommentQueryService:30`,
-`FlagMemorialQueryService:31`이 Flag를 먼저 로드해 404를 내고,
-`FlagInvitationQueryService:42,58`이 `flagMap.containsKey(...)`로 걸러낸다.
+### `encoreFlag`의 예외 변환
 
-2번은 이 전략을 바꾸는 것이 아니라, 규칙에서 벗어난 참여자를 규칙 안으로 들이는 것이다.
+`FlagEncoreFactory`의 `existsByParentId` 검사와 서비스의
+`DataIntegrityViolationException` 캐치는 중복이 아니라 경합을 막는 이중 방어다.
 
-### 포트의 네이밍 스타일 혼재
+### 쿼리 패턴
 
-`FlagRepository`에 도메인 어휘(`isParticipating`, `countParticipants`)와 JPA 파생 이름
-(`findAllByHostId`, `existsByParentId`)이 섞여 있다. 통일 방향에 판단이 갈리고 호출부가
-넓어 별도 안건으로 둔다.
-
-### `FlagRepository`가 Flag와 FlagParticipant를 함께 담당하는 것
-
-`FlagParticipant`의 생성자가 package-private이고 `Flag.participate()`만 생성하므로
-Flag 애그리거트 내부다. 애그리거트 루트당 리포지토리 하나가 맞다.
+2번 외에 N+1이 없다. `getCommentTree`도 유저 정보를 배치로 모은다.
 
 ### 그 외
 
+- 포트 네이밍 스타일 통일, `FlagRepository` 분할 — task-98에서 범위 외로 둔 그대로
 - 인덱스 — task-96
-- 쿼리 패턴 — `FlagQueryService`는 4번 외에 N+1이 없다. 전부 배치 조회다
-- 다른 도메인의 저장소 계층
+- 다른 도메인, 프론트엔드
 
 ---
 
@@ -375,42 +309,44 @@ Flag 애그리거트 내부다. 애그리거트 루트당 리포지토리 하나
 
 | 파일 | 항목 |
 |------|------|
-| `FlagHardPurgeService.java` | 1, 6 |
-| `FlagMaintenanceAdapter.java` | 1, 6, 7 |
-| `FlagDeletionEventListener.java` | 2 |
-| `FlagParticipationManager.java` | 2 — 검사 순서, 5 — 호출부 |
-| `FlagRepository.java` (포트) | 3, 5 |
-| `FlagInvitationRepository.java` (포트) | 3 |
-| `FlagRepositoryAdapter.java` | 3, 5 |
-| `FlagInvitationRepositoryAdapter.java` | 3 |
-| `FlagParticipantJpaRepository.java` | 3 — `deleteAllByFlagId` 삭제 |
-| `FlagQueryService.java` | 4 |
-| `FlagJpaRepository.java` | 5, 6 |
-| `FlagMaintenancePort.java` | 6 — 시그니처 |
-| `FlagManagementService.java` | 5 — 호출부 |
-| `FlagDeletionEventListenerTest.java` | 2 — 즉시 삭제 검증 제거 |
-| `FlagMaintenanceAdapterTest.java` | 8 — 신규 |
-| `FlagParticipantJpaRepositoryTest.java` | 8 — 신규 |
-| `FlagCommentJpaRepositoryTest.java` | 8 — 신규 |
-| `FlagMemorialJpaRepositoryTest.java` | 8 — 신규 |
+| `FlagManagementService.java` → `FlagModificationService.java` | 1, 5 — 리네임 |
+| `FlagManagementUseCase.java` → `FlagModificationUseCase.java` | 5 |
+| `FlagController.java` | 5 — 주입 필드 |
+| `FlagMemorialQueryService.java` | 2 |
+| `FlagMemorialRepository.java` (포트) | 2 — `existsByFlagIdAndWriterId` 삭제 |
+| `FlagMemorialRepositoryAdapter.java` | 2 |
+| `FlagMemorialJpaRepository.java` | 2 |
+| `FlagInvitationService.java` | 3 |
+| `FlagDeletionEventListener.java` | 4 |
+| `FlagMeetingChangedEventListener.java` | 4 |
+| `FlagManagementServiceTest.java` → `FlagModificationServiceTest.java` | 1 — 잠금 뒤 카운트 검증, 5 — 리네임 |
+| `FlagMemorialQueryServiceTest.java` | 2 — 스텁 갱신 |
+| `FlagMemorialJpaRepositoryTest.java` | 2 — 삭제된 메서드 테스트 제거 |
+| `FlagInvitationServiceTest.java` → `invitation/FlagInvitationCommandServiceTest.java` | 3 — 스텁 갱신, 5 — 이동·리네임 |
+| `FlagInvitationQueryServiceTest.java` | 5 — 이동 |
+| `flag/FlagInvitationService.java` → `invitation/FlagInvitationCommandService.java` | 5 — 이동·리네임 |
+| `flag/FlagInvitationQueryService.java` → `invitation/FlagInvitationQueryService.java` | 5 — 이동 |
+| `FlagLabelingScheduler.java` → `FlagExpiryScheduler.java` | 6 |
+| `FlagSweepingScheduler.java` → `FlagPurgeScheduler.java` | 6 |
+| `FlagExpiryService.java` | 6 — 메서드명·로그 |
+| `FlagHardPurgeService.java` → `FlagPurgeService.java` | 6 |
+| `FlagExpiryServiceTest.java` | 6 — 메서드명 |
+| `FlagPurgeServiceTest.java` | 7 — 신규 |
 
 ## 커밋 구성
 
 | | 내용 | 동작 변화 |
 |---|---|---|
-| 1 | 퍼지 트랜잭션 분리 정상화 (1) | **부분 성공 허용** |
-| 2 | 참여자 즉시 삭제 제거 (2) | **참여자 수명 연장** |
-| 3 | 죽은 포트 메서드 3개 삭제 (3) | 없음 |
-| 4 | 퍼지 처리량 파라미터화 + 필드명 (6, 7) | 없음 |
-| 5 | 잠금 어휘 통일 (5) | 없음 |
-| 6 | `getFriendFlags` 과다 조회 제거 (4) | 없음 |
-| 7 | 저장소 계층 테스트 4종 (8) | 없음 |
-
-2번과 3번은 순서가 고정된다 — 2번이 `deleteAllParticipants`를 죽여야 3번에서 지울 수 있다.
+| 1 | 정원 변경의 잠금 순서 교정 (1) | 경합 상황에서만 |
+| 2 | `getMemorials` 쿼리 축소 + 죽은 포트 메서드 (2) | 없음 |
+| 3 | `invite()` 거짓 분기 제거, `occurredAt` 잉여 제거 (3, 4) | 없음 |
+| 4 | 서비스 패키지·이름 정리 + 배치 어휘 통일 (5, 6) | 없음 |
+| 5 | `FlagPurgeServiceTest` 신규 (7) | 없음 |
 
 ## 테스트 실행 범위
 
 `TESTING-GUIDE.md` 프로토콜을 따른다.
 
-신규 4종 + `FlagDeletionEventListenerTest`, `FlagQueryServiceTest`, `FlagJpaRepositoryTest`,
-`FlagInvitationJpaRepositoryTest`, `FlagManagementServiceTest`, `FlagParticipationManagerTest`.
+`FlagModificationServiceTest`, `FlagMemorialQueryServiceTest`, `FlagMemorialJpaRepositoryTest`,
+`FlagInvitationCommandServiceTest`, `FlagPurgeServiceTest`, `FlagExpiryServiceTest`,
+그리고 `FlagPreservationPolicyTest`(`existsByFlagId`를 계속 쓰는 유일한 호출부).
