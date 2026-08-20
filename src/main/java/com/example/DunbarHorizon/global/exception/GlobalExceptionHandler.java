@@ -9,6 +9,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -87,6 +88,15 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.builder()
                         .error("NotFoundException")
                         .message("요청하신 경로를 찾을 수 없습니다: " + e.getResourcePath())
+                        .build());
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponse.builder()
+                        .error("MethodNotAllowedException")
+                        .message("지원하지 않는 요청 메서드입니다: " + e.getMethod())
                         .build());
     }
 

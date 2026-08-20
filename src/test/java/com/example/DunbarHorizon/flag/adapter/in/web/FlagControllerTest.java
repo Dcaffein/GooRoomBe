@@ -151,10 +151,52 @@ class FlagControllerTest extends BaseControllerTest {
     @Test
     @DisplayName("플래그 탈퇴 시 204를 반환하고 leaveFlag()를 호출한다")
     void leave_Returns204() throws Exception {
-        mockMvc.perform(delete("/api/v1/flags/1/participants"))
+        mockMvc.perform(delete("/api/v1/flags/1/participants/me"))
                 .andExpect(status().isNoContent());
 
         verify(flagParticipationUseCase).leaveFlag(1L, CURRENT_USER_ID);
+    }
+
+    @Test
+    @DisplayName("참여자 컬렉션 루트의 DELETE는 405를 반환한다")
+    void leave_CollectionRoot_Returns405() throws Exception {
+        mockMvc.perform(delete("/api/v1/flags/1/participants"))
+                .andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    @DisplayName("참여자 초대 권한 수정 시 200을 반환하고 updateInvitePermission()을 호출한다")
+    void updateInvitePermission_Returns200() throws Exception {
+        String body = """
+                {"canInvite": true}
+                """;
+
+        mockMvc.perform(patch("/api/v1/flags/1/participants/2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk());
+
+        verify(flagInvitationUseCase).updateInvitePermission(1L, CURRENT_USER_ID, 2L, true);
+    }
+
+    @Test
+    @DisplayName("참여자 수정 시 canInvite가 없으면 400을 반환한다")
+    void updateInvitePermission_MissingCanInvite_Returns400() throws Exception {
+        mockMvc.perform(patch("/api/v1/flags/1/participants/2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("구 invite-permission URL은 더 이상 매핑되지 않는다")
+    void updateInvitePermission_LegacyUrl_Returns404() throws Exception {
+        mockMvc.perform(patch("/api/v1/flags/1/participants/2/invite-permission")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"canInvite": true}
+                                """))
+                .andExpect(status().isNotFound());
     }
 
     @Test

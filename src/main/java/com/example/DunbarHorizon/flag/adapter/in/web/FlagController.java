@@ -109,7 +109,7 @@ public class FlagController {
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @DeleteMapping("/{flagId}/participants")
+    @DeleteMapping("/{flagId}/participants/me")
     public ResponseEntity<Void> leave(
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
@@ -118,7 +118,7 @@ public class FlagController {
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/{flagId}/participants/{participantId}/invite-permission")
+    @PatchMapping("/{flagId}/participants/{participantId}")
     public ResponseEntity<Void> updateInvitePermission(
             @PathVariable Long flagId,
             @PathVariable Long participantId,
