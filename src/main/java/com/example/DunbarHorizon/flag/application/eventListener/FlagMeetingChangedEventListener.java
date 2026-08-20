@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Component
@@ -36,7 +35,6 @@ public class FlagMeetingChangedEventListener {
                 .title("모임 시간 변경 안내")
                 .content(String.format("[%s] 모임 시간이 변경되었습니다. 새로운 일정을 확인해주세요!", event.flagTitle()))
                 .type(NotificationType.FLAG_SCHEDULE_CHANGED)
-                .occurredAt(LocalDateTime.now())
                 .build();
 
         eventPublisher.publishEvent(notificationEvent);

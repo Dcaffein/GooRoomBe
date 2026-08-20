@@ -1,7 +1,9 @@
 package com.example.DunbarHorizon.flag.application.service.flag;
 
 import com.example.DunbarHorizon.flag.application.port.in.FlagInvitationUseCase;
+import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
+import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundException;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitation;
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationManager;
@@ -32,9 +34,10 @@ public class FlagInvitationService implements FlagInvitationUseCase {
         FlagInvitation invitation = invitationManager.invite(flagId, inviterId, inviteeId);
         FlagInvitation saved = invitationRepository.save(invitation);
 
+        // invitationManager가 이미 Flag 존재를 검증했다. 같은 트랜잭션이라 1차 캐시 히트다.
         String flagTitle = flagRepository.findById(flagId)
-                .map(f -> f.getTitle())
-                .orElse("");
+                .map(Flag::getTitle)
+                .orElseThrow(() -> new FlagNotFoundException(flagId));
 
         eventPublisher.publishEvent(new FlagInvitationSentEvent(
                 flagId, saved.getId(), inviteeId, flagTitle, false

@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -73,7 +72,6 @@ public class FlagDeletionEventListener {
                 .title("모임 취소 안내")
                 .content(String.format("[%s] 모임이 호스트 사정으로 취소되었습니다.", title))
                 .type(NotificationType.FLAG_CANCELED)
-                .occurredAt(LocalDateTime.now())
                 .build();
 
         eventPublisher.publishEvent(notificationEvent);
