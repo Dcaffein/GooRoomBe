@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -24,6 +25,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -99,6 +101,24 @@ class FlagManagementServiceTest {
 
         // then
         assertThat(flag.getCapacity()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("정원 변경은 Flag를 잠근 뒤에 참여자를 센다")
+    void modifyFlagCapacity_LocksBeforeCounting() {
+        // given — 잠금 밖에서 세면 그 사이 참여가 끼어들어 정원보다 참여자가 많아질 수 있다
+        Flag flag = recruitingFlag();
+        given(flagRepository.findByIdForUpdate(1L)).willReturn(Optional.of(flag));
+        given(flagRepository.countParticipants(1L)).willReturn(3);
+        FlagCapacityUpdateCommand command = new FlagCapacityUpdateCommand(1L, HOST_ID, 5);
+
+        // when
+        flagManagementService.modifyFlagCapacity(command);
+
+        // then
+        InOrder inOrder = inOrder(flagRepository);
+        inOrder.verify(flagRepository).findByIdForUpdate(1L);
+        inOrder.verify(flagRepository).countParticipants(1L);
     }
 
     @Test
