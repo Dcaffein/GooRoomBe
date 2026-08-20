@@ -37,14 +37,16 @@ public class FlagDeletionEventListener {
         Optional<Flag> encoreResult = flagRepository.findByParentId(event.flagId());
         encoreResult.ifPresent(Flag::severParentLink);
 
-        processParticipantCleanup(event, event.hostId());
+        notifyParticipants(event, event.hostId());
 
         if (event.parentId() != null) {
             flagPreservationPolicy.refresh(event.parentId());
         }
     }
 
-    private void processParticipantCleanup(FlagDeletedEvent event, Long hostId) {
+    // 참여자 삭제는 하드 퍼지 배치가 맡는다. 이 메서드는 발행만 하므로 재실행 시
+    // 알림이 중복될 수 있다 — 재시도나 아웃박스를 도입하면 멱등 키가 필요하다.
+    private void notifyParticipants(FlagDeletedEvent event, Long hostId) {
         List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
 
         if (!participantIds.isEmpty() && event.statusAtDeletion() != FlagStatus.RECRUITING) {
@@ -54,8 +56,6 @@ public class FlagDeletionEventListener {
         if (!participantIds.isEmpty() && isMeetingHeld(event.statusAtDeletion())) {
             publishInteractionEvents(participantIds, hostId, event.parentId() != null);
         }
-
-        flagRepository.deleteAllParticipants(event.flagId());
     }
 
     private boolean isMeetingHeld(FlagStatus status) {

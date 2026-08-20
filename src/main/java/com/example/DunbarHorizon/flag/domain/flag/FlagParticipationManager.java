@@ -34,12 +34,12 @@ public class FlagParticipationManager {
     }
 
     public FlagParticipant participateByInvitation(Long flagId, Long userId) {
+        Flag lockedFlag = flagRepository.findByIdExclusive(flagId)
+                .orElseThrow(() -> new FlagNotFoundException(flagId));
+
         if (flagRepository.isParticipating(flagId, userId)) {
             throw new FlagParticipationDuplicateException(flagId, userId);
         }
-
-        Flag lockedFlag = flagRepository.findByIdExclusive(flagId)
-                .orElseThrow(() -> new FlagNotFoundException(flagId));
 
         int count = flagRepository.countParticipants(flagId);
         return lockedFlag.participate(userId, count);
