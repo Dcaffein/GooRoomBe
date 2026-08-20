@@ -5,6 +5,7 @@ import com.example.DunbarHorizon.flag.application.dto.result.FlagDetailResult;
 import com.example.DunbarHorizon.flag.application.port.in.FlagRole;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
+import com.example.DunbarHorizon.flag.domain.flag.exception.FlagInvalidStatusException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundException;
 import com.example.DunbarHorizon.support.BaseControllerTest;
 import com.example.DunbarHorizon.support.WithMockCustomUser;
@@ -18,6 +19,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -296,5 +298,15 @@ class FlagControllerTest extends BaseControllerTest {
 
         mockMvc.perform(get("/api/v1/flags/users/2/recent"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("모집 종료 후 탈퇴하면 409를 반환한다")
+    void leave_AfterRecruitmentClosed_Returns409() throws Exception {
+        willThrow(new FlagInvalidStatusException("모집 기간이 종료된 이후에는 참여를 취소할 수 없습니다."))
+                .given(flagParticipationUseCase).leaveFlag(1L, CURRENT_USER_ID);
+
+        mockMvc.perform(delete("/api/v1/flags/1/participants/me"))
+                .andExpect(status().isConflict());
     }
 }

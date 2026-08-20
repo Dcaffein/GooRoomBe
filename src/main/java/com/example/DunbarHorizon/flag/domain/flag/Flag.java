@@ -6,6 +6,7 @@ import com.example.DunbarHorizon.flag.domain.flag.event.FlagMeetingChangedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagAuthorizationException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagDeadlinePassedException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagFullCapacityException;
+import com.example.DunbarHorizon.flag.domain.flag.exception.FlagInvalidCapacityException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagInvalidStatusException;
 import com.example.DunbarHorizon.global.common.BaseTimeAggregateRoot;
 import com.example.DunbarHorizon.global.common.SoftDeletable;
@@ -97,7 +98,7 @@ public class Flag extends BaseTimeAggregateRoot implements SoftDeletable {
 
     FlagParticipant participate(Long userId, int currentCount) {
         if (this.hostId.equals(userId)) {
-            throw new IllegalStateException("호스트는 참여자 명단에 등록될 수 없습니다.");
+            throw new FlagAuthorizationException("호스트는 참여자 명단에 등록될 수 없습니다.");
         }
 
         if (!this.isRecruiting()) {
@@ -117,14 +118,14 @@ public class Flag extends BaseTimeAggregateRoot implements SoftDeletable {
         }
 
         if (!this.calculateCurrentStatus().isBeforeActivity()) {
-            throw new IllegalStateException("모집 기간이 종료된 이후에는 참여를 취소할 수 없습니다.");
+            throw new FlagInvalidStatusException("모집 기간이 종료된 이후에는 참여를 취소할 수 없습니다.");
         }
     }
 
     public void delete(Long requesterId) {
         validateHost(requesterId);
         if (isDeleted()) {
-            throw new IllegalStateException("이미 삭제된 플래그입니다.");
+            throw new FlagInvalidStatusException("이미 삭제된 플래그입니다.");
         }
         softDelete();
         registerEvent(new FlagDeletedEvent(
@@ -222,7 +223,7 @@ public class Flag extends BaseTimeAggregateRoot implements SoftDeletable {
 
     private void validateCapacity(Integer capacity) {
         if (capacity == null) return;
-        if (capacity < 1) throw new IllegalArgumentException("인원 제한은 최소 1명 이상이어야 합니다.");
+        if (capacity < 1) throw new FlagInvalidCapacityException("인원 제한은 최소 1명 이상이어야 합니다.");
     }
 
     private void validateNewCapacity(Integer newCapacity, int currentCount) {

@@ -86,7 +86,7 @@ class FlagTest {
 
         // when / then
         assertThatThrownBy(() -> flag.participate(HOST_ID, 0))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(FlagAuthorizationException.class);
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.example.DunbarHorizon.flag.domain.memorial;
 
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagAuthorizationException;
 import com.example.DunbarHorizon.flag.domain.memorial.event.MemorialCreatedEvent;
+import com.example.DunbarHorizon.flag.domain.memorial.exception.FlagMemorialInvalidContentException;
 import com.example.DunbarHorizon.global.common.BaseTimeAggregateRoot;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -32,7 +33,7 @@ public class FlagMemorial extends BaseTimeAggregateRoot {
 
     private void validateContent(String content) {
         if (content == null || content.isBlank() || content.length() > 1000) {
-            throw new IllegalArgumentException("flag memorial은 1자 이상 1000자 이하로 작성해야 합니다.");
+            throw new FlagMemorialInvalidContentException("flag memorial은 1자 이상 1000자 이하로 작성해야 합니다.");
         }
     }
 

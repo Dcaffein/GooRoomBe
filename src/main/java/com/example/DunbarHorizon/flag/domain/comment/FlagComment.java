@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.flag.domain.comment;
 
 import com.example.DunbarHorizon.flag.domain.comment.exception.FlagCommentAuthorizationException;
+import com.example.DunbarHorizon.flag.domain.comment.exception.FlagCommentInvalidContentException;
 import com.example.DunbarHorizon.flag.domain.comment.exception.FlagCommentReplyDepthException;
 import com.example.DunbarHorizon.global.common.BaseTimeAggregateRoot;
 import jakarta.persistence.*;
@@ -84,7 +85,7 @@ public class FlagComment extends BaseTimeAggregateRoot {
 
     private void validateContent(String content) {
         if (content == null || content.isBlank() || content.length() > 500) {
-            throw new IllegalArgumentException("내용은 1자 이상 500자 이하로 작성해주세요.");
+            throw new FlagCommentInvalidContentException("내용은 1자 이상 500자 이하로 작성해주세요.");
         }
     }
 

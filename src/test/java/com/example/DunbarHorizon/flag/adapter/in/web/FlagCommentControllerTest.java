@@ -156,4 +156,32 @@ class FlagCommentControllerTest extends BaseControllerTest {
                                 """))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    @DisplayName("Comment 내용이 500자를 넘으면 400을 반환한다")
+    void createRootComment_ContentTooLong_Returns400() throws Exception {
+        String tooLong = "가".repeat(501);
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("content", tooLong, "isPrivate", false));
+
+        mockMvc.perform(post("/api/v1/flags/1/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validation.content").exists());
+    }
+
+    @Test
+    @DisplayName("Comment 수정 내용이 500자를 넘으면 400을 반환한다")
+    void updateComment_ContentTooLong_Returns400() throws Exception {
+        String tooLong = "가".repeat(501);
+        String body = objectMapper.writeValueAsString(
+                java.util.Map.of("content", tooLong, "isPrivate", false));
+
+        mockMvc.perform(patch("/api/v1/flags/1/comments/2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.validation.content").exists());
+    }
 }

@@ -1,5 +1,6 @@
 package com.example.DunbarHorizon.flag.domain.comment;
 
+import com.example.DunbarHorizon.flag.domain.comment.exception.FlagCommentInvalidContentException;
 import com.example.DunbarHorizon.flag.domain.comment.exception.FlagCommentAuthorizationException;
 import com.example.DunbarHorizon.flag.domain.comment.exception.FlagCommentReplyDepthException;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +33,7 @@ class FlagCommentTest {
     @DisplayName("내용이 비어있으면 댓글 생성 시 예외가 발생한다")
     void createRoot_BlankContent_ThrowsException() {
         assertThatThrownBy(() -> FlagComment.createRoot(FLAG_ID, WRITER_ID, "  ", false))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(FlagCommentInvalidContentException.class);
     }
 
     @Test
@@ -43,7 +44,7 @@ class FlagCommentTest {
 
         // when / then
         assertThatThrownBy(() -> FlagComment.createRoot(FLAG_ID, WRITER_ID, tooLong, false))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(FlagCommentInvalidContentException.class);
     }
 
     @Test
