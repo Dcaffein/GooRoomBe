@@ -1,4 +1,4 @@
-package com.example.DunbarHorizon.flag.application.service.flag;
+package com.example.DunbarHorizon.flag.application.service.invitation;
 
 import com.example.DunbarHorizon.flag.application.dto.info.FlagUserInfo;
 import com.example.DunbarHorizon.flag.application.dto.result.ReceivedFlagInvitationResult;

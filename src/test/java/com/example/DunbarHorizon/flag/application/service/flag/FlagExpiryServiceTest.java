@@ -31,7 +31,7 @@ class FlagExpiryServiceTest {
         LocalDateTime before = LocalDateTime.now().minusHours(Flag.EXPIRATION_THRESHOLD_HOURS);
 
         // when
-        flagExpiryService.labelExpiredFlags();
+        flagExpiryService.expireEndedFlags();
 
         // then
         ArgumentCaptor<LocalDateTime> thresholdCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
@@ -54,7 +54,7 @@ class FlagExpiryServiceTest {
         given(flagRepository.expireAllExceedingThreshold(any(), any())).willReturn(3);
 
         // when
-        flagExpiryService.labelExpiredFlags();
+        flagExpiryService.expireEndedFlags();
 
         // then
         verify(flagRepository).expireAllExceedingThreshold(any(LocalDateTime.class), any(LocalDateTime.class));

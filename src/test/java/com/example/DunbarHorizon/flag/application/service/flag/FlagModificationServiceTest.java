@@ -31,7 +31,7 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class FlagManagementServiceTest {
 
-    @InjectMocks private FlagManagementService flagManagementService;
+    @InjectMocks private FlagModificationService flagModificationService;
 
     @Mock private FlagRepository flagRepository;
 
@@ -55,7 +55,7 @@ class FlagManagementServiceTest {
         FlagDetailsUpdateCommand command = new FlagDetailsUpdateCommand(1L, HOST_ID, "새 제목", "새 설명");
 
         // when
-        flagManagementService.modifyFlagDetails(command);
+        flagModificationService.modifyFlagDetails(command);
 
         // then
         assertThat(flag.getTitle()).isEqualTo("새 제목");
@@ -71,7 +71,7 @@ class FlagManagementServiceTest {
         FlagDetailsUpdateCommand command = new FlagDetailsUpdateCommand(1L, OTHER_ID, "새 제목", "새 설명");
 
         // when / then
-        assertThatThrownBy(() -> flagManagementService.modifyFlagDetails(command))
+        assertThatThrownBy(() -> flagModificationService.modifyFlagDetails(command))
                 .isInstanceOf(FlagAuthorizationException.class);
     }
 
@@ -83,7 +83,7 @@ class FlagManagementServiceTest {
         FlagDetailsUpdateCommand command = new FlagDetailsUpdateCommand(999L, HOST_ID, "제목", "설명");
 
         // when / then
-        assertThatThrownBy(() -> flagManagementService.modifyFlagDetails(command))
+        assertThatThrownBy(() -> flagModificationService.modifyFlagDetails(command))
                 .isInstanceOf(FlagNotFoundException.class);
     }
 
@@ -97,7 +97,7 @@ class FlagManagementServiceTest {
         FlagCapacityUpdateCommand command = new FlagCapacityUpdateCommand(1L, HOST_ID, 5);
 
         // when
-        flagManagementService.modifyFlagCapacity(command);
+        flagModificationService.modifyFlagCapacity(command);
 
         // then
         assertThat(flag.getCapacity()).isEqualTo(5);
@@ -113,7 +113,7 @@ class FlagManagementServiceTest {
         FlagCapacityUpdateCommand command = new FlagCapacityUpdateCommand(1L, HOST_ID, 5);
 
         // when
-        flagManagementService.modifyFlagCapacity(command);
+        flagModificationService.modifyFlagCapacity(command);
 
         // then
         InOrder inOrder = inOrder(flagRepository);
@@ -131,7 +131,7 @@ class FlagManagementServiceTest {
         FlagCapacityUpdateCommand command = new FlagCapacityUpdateCommand(1L, HOST_ID, 3);
 
         // when / then
-        assertThatThrownBy(() -> flagManagementService.modifyFlagCapacity(command))
+        assertThatThrownBy(() -> flagModificationService.modifyFlagCapacity(command))
                 .isInstanceOf(FlagInvalidStatusException.class);
     }
 
@@ -144,7 +144,7 @@ class FlagManagementServiceTest {
         );
 
         // when / then — FlagSchedule.of() throws before flag lookup
-        assertThatThrownBy(() -> flagManagementService.reschedule(command))
+        assertThatThrownBy(() -> flagModificationService.reschedule(command))
                 .isInstanceOf(FlagScheduleInvalidException.class);
     }
 
@@ -160,7 +160,7 @@ class FlagManagementServiceTest {
         FlagScheduleUpdateCommand command = new FlagScheduleUpdateCommand(1L, HOST_ID, NOW.plusHours(4), newStart, newEnd);
 
         // when
-        flagManagementService.reschedule(command);
+        flagModificationService.reschedule(command);
 
         // then
         assertThat(flag.getSchedule().getStartDateTime()).isEqualTo(newStart);
@@ -176,7 +176,7 @@ class FlagManagementServiceTest {
         given(flagRepository.save(any(Flag.class))).willReturn(flag);
 
         // when
-        flagManagementService.closeFlag(1L, HOST_ID);
+        flagModificationService.closeFlag(1L, HOST_ID);
 
         // then
         assertThat(flag.isDeleted()).isTrue();
@@ -191,7 +191,7 @@ class FlagManagementServiceTest {
         given(flagRepository.findById(1L)).willReturn(Optional.of(flag));
 
         // when / then
-        assertThatThrownBy(() -> flagManagementService.closeFlag(1L, OTHER_ID))
+        assertThatThrownBy(() -> flagModificationService.closeFlag(1L, OTHER_ID))
                 .isInstanceOf(FlagAuthorizationException.class);
     }
 }

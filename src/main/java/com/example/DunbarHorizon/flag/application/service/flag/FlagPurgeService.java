@@ -11,21 +11,21 @@ import java.util.List;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class FlagHardPurgeService {
+public class FlagPurgeService {
 
     private static final int BUFFER_HOURS = 12;
     private static final int BATCH_SIZE = 5000;
 
     private final FlagMaintenancePort maintenancePort;
 
-    public void sweepExpiredData() {
+    public void purgeExpiredFlags() {
         LocalDateTime bufferTime = LocalDateTime.now().minusHours(BUFFER_HOURS);
 
         List<Long> targets = maintenancePort.findIdsReadyForHardDelete(bufferTime, BATCH_SIZE);
 
         if (!targets.isEmpty()) {
             maintenancePort.purgeFlagsAndRelatedData(targets);
-            log.info("물리 삭제 집행 완료: {}건의 데이터 영구 제거", targets.size());
+            log.info("퍼지 완료: {}건의 플래그를 관련 데이터와 함께 영구 삭제", targets.size());
         }
     }
 }

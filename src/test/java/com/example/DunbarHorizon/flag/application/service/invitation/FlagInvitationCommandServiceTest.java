@@ -1,4 +1,4 @@
-package com.example.DunbarHorizon.flag.application.service.flag;
+package com.example.DunbarHorizon.flag.application.service.invitation;
 
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
@@ -30,7 +30,7 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class FlagInvitationServiceTest {
 
-    @InjectMocks private FlagInvitationService flagInvitationService;
+    @InjectMocks private FlagInvitationCommandService flagInvitationService;
 
     @Mock private FlagInvitationManager invitationManager;
     @Mock private FlagInvitationRepository invitationRepository;

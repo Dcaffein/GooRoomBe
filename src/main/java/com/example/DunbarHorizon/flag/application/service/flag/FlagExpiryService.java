@@ -17,14 +17,14 @@ public class FlagExpiryService {
     private final FlagRepository flagRepository;
 
     @Transactional
-    public void labelExpiredFlags() {
+    public void expireEndedFlags() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime threshold = now.minusHours(Flag.EXPIRATION_THRESHOLD_HOURS);
 
         int count = flagRepository.expireAllExceedingThreshold(threshold, now);
 
         if (count > 0) {
-            log.info("시스템 자동 만료 처리 완료: {}건의 플래그에 deletedAt 기록", count);
+            log.info("자동 만료 완료: {}건의 플래그를 소프트 삭제", count);
         }
     }
 }

@@ -7,13 +7,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class FlagLabelingScheduler {
+public class FlagExpiryScheduler {
 
     private final FlagExpiryService expiryService;
 
     @Scheduled(cron = "0 0 0/6 * * *")
-    public void runLabeling() {
-        expiryService.labelExpiredFlags();
-
+    public void runExpiry() {
+        expiryService.expireEndedFlags();
     }
 }

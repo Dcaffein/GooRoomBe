@@ -87,7 +87,7 @@ class FlagControllerTest extends BaseControllerTest {
                         .content(body))
                 .andExpect(status().isOk());
 
-        verify(flagManagementUseCase).modifyFlagDetails(any());
+        verify(flagModificationUseCase).modifyFlagDetails(any());
     }
 
     @Test
@@ -102,7 +102,7 @@ class FlagControllerTest extends BaseControllerTest {
                         .content(body))
                 .andExpect(status().isOk());
 
-        verify(flagManagementUseCase).modifyFlagCapacity(any());
+        verify(flagModificationUseCase).modifyFlagCapacity(any());
     }
 
     @Test
@@ -120,7 +120,7 @@ class FlagControllerTest extends BaseControllerTest {
                         .content(body))
                 .andExpect(status().isOk());
 
-        verify(flagManagementUseCase).reschedule(any());
+        verify(flagModificationUseCase).reschedule(any());
     }
 
     @Test
@@ -129,7 +129,7 @@ class FlagControllerTest extends BaseControllerTest {
         mockMvc.perform(patch("/api/v1/flags/1/schedule/deadline"))
                 .andExpect(status().isOk());
 
-        verify(flagManagementUseCase).closeRecruitment(1L, CURRENT_USER_ID);
+        verify(flagModificationUseCase).closeRecruitment(1L, CURRENT_USER_ID);
     }
 
     @Test
@@ -138,7 +138,7 @@ class FlagControllerTest extends BaseControllerTest {
         mockMvc.perform(delete("/api/v1/flags/1"))
                 .andExpect(status().isNoContent());
 
-        verify(flagManagementUseCase).closeFlag(1L, CURRENT_USER_ID);
+        verify(flagModificationUseCase).closeFlag(1L, CURRENT_USER_ID);
     }
 
     @Test

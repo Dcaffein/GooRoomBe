@@ -1,6 +1,6 @@
 package com.example.DunbarHorizon.flag.application.service.flag;
 
-import com.example.DunbarHorizon.flag.application.port.in.FlagManagementUseCase;
+import com.example.DunbarHorizon.flag.application.port.in.FlagModificationUseCase;
 import com.example.DunbarHorizon.flag.application.port.in.command.FlagCapacityUpdateCommand;
 import com.example.DunbarHorizon.flag.application.port.in.command.FlagDetailsUpdateCommand;
 import com.example.DunbarHorizon.flag.application.port.in.command.FlagScheduleUpdateCommand;
@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class FlagManagementService implements FlagManagementUseCase {
+public class FlagModificationService implements FlagModificationUseCase {
     private final FlagRepository flagRepository;
 
     @Override

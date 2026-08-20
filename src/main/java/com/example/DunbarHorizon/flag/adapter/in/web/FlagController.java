@@ -20,7 +20,7 @@ import java.util.List;
 public class FlagController {
 
     private final FlagHostUseCase flagHostUseCase;
-    private final FlagManagementUseCase flagManagementUseCase;
+    private final FlagModificationUseCase flagModificationUseCase;
     private final FlagParticipationUseCase flagParticipationUseCase;
     private final FlagInvitationUseCase flagInvitationUseCase;
     private final FlagQueryUseCase flagQueryUseCase;
@@ -52,7 +52,7 @@ public class FlagController {
             @CurrentUserId Long currentUserId,
             @RequestBody @Valid FlagDetailsUpdateRequest request
     ) {
-        flagManagementUseCase.modifyFlagDetails(new FlagDetailsUpdateCommand(
+        flagModificationUseCase.modifyFlagDetails(new FlagDetailsUpdateCommand(
                 flagId, currentUserId, request.title(), request.description()
         ));
         return ResponseEntity.ok().build();
@@ -64,7 +64,7 @@ public class FlagController {
             @CurrentUserId Long currentUserId,
             @RequestBody @Valid FlagCapacityUpdateRequest request
     ) {
-        flagManagementUseCase.modifyFlagCapacity(new FlagCapacityUpdateCommand(
+        flagModificationUseCase.modifyFlagCapacity(new FlagCapacityUpdateCommand(
                 flagId, currentUserId, request.capacity()
         ));
         return ResponseEntity.ok().build();
@@ -76,7 +76,7 @@ public class FlagController {
             @CurrentUserId Long currentUserId,
             @RequestBody @Valid FlagScheduleUpdateRequest request
     ) {
-        flagManagementUseCase.reschedule(new FlagScheduleUpdateCommand(
+        flagModificationUseCase.reschedule(new FlagScheduleUpdateCommand(
                 flagId, currentUserId, request.deadline(), request.startDateTime(), request.endDateTime()
         ));
         return ResponseEntity.ok().build();
@@ -87,7 +87,7 @@ public class FlagController {
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
     ) {
-        flagManagementUseCase.closeRecruitment(flagId, currentUserId);
+        flagModificationUseCase.closeRecruitment(flagId, currentUserId);
         return ResponseEntity.ok().build();
     }
 
@@ -96,7 +96,7 @@ public class FlagController {
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
     ) {
-        flagManagementUseCase.closeFlag(flagId, currentUserId);
+        flagModificationUseCase.closeFlag(flagId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 

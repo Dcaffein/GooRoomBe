@@ -4,7 +4,7 @@ import com.example.DunbarHorizon.flag.application.port.in.command.FlagCapacityUp
 import com.example.DunbarHorizon.flag.application.port.in.command.FlagDetailsUpdateCommand;
 import com.example.DunbarHorizon.flag.application.port.in.command.FlagScheduleUpdateCommand;
 
-public interface FlagManagementUseCase {
+public interface FlagModificationUseCase {
     void modifyFlagDetails(FlagDetailsUpdateCommand command);
     void modifyFlagCapacity(FlagCapacityUpdateCommand command);
     void reschedule(FlagScheduleUpdateCommand command);

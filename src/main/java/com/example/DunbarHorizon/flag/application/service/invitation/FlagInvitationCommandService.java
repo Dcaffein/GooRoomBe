@@ -1,4 +1,4 @@
-package com.example.DunbarHorizon.flag.application.service.flag;
+package com.example.DunbarHorizon.flag.application.service.invitation;
 
 import com.example.DunbarHorizon.flag.application.port.in.FlagInvitationUseCase;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class FlagInvitationService implements FlagInvitationUseCase {
+public class FlagInvitationCommandService implements FlagInvitationUseCase {
 
     private final FlagInvitationManager invitationManager;
     private final FlagInvitationRepository invitationRepository;
