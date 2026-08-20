@@ -261,7 +261,7 @@ class FlagControllerTest extends BaseControllerTest {
         Long targetUserId = 2L;
         given(flagQueryUseCase.getRecentFlags(targetUserId)).willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/flags/users/{userId}/recent", targetUserId))
+        mockMvc.perform(get("/api/v1/flags").param("userId", String.valueOf(targetUserId)).param("sort", "recent"))
                 .andExpect(status().isOk());
 
         verify(flagQueryUseCase).getRecentFlags(targetUserId);
@@ -273,9 +273,28 @@ class FlagControllerTest extends BaseControllerTest {
         Long targetUserId = 2L;
         given(flagQueryUseCase.getFlagsByRole(targetUserId, FlagRole.PARTICIPANT)).willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/flags/users/{userId}", targetUserId).param("role", "PARTICIPANT"))
+        mockMvc.perform(get("/api/v1/flags")
+                        .param("userId", String.valueOf(targetUserId))
+                        .param("role", "PARTICIPANT"))
                 .andExpect(status().isOk());
 
         verify(flagQueryUseCase).getFlagsByRole(targetUserId, FlagRole.PARTICIPANT);
+    }
+
+    @Test
+    @DisplayName("파라미터 없는 /api/v1/flags 조회는 400을 반환한다")
+    void getFlags_NoParams_Returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/flags"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("구 유저 축 조회 URL은 더 이상 매핑되지 않는다")
+    void legacyUserFlagUrls_Return404() throws Exception {
+        mockMvc.perform(get("/api/v1/flags/users/2").param("role", "HOST"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/v1/flags/users/2/recent"))
+                .andExpect(status().isNotFound());
     }
 }

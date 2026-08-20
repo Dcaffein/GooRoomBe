@@ -144,17 +144,17 @@ public class FlagController {
         return ResponseEntity.ok(flagQueryUseCase.getFriendFlags(currentUserId));
     }
 
-    @GetMapping("/users/{userId}")
+    @GetMapping(params = {"userId", "role"})
     public ResponseEntity<List<FlagResult>> getUserFlagsByRole(
-            @PathVariable Long userId,
+            @RequestParam Long userId,
             @RequestParam FlagRole role
     ) {
         return ResponseEntity.ok(flagQueryUseCase.getFlagsByRole(userId, role));
     }
 
-    @GetMapping("/users/{userId}/recent")
+    @GetMapping(params = {"userId", "sort=recent"})
     public ResponseEntity<List<FlagResult>> getRecentFlags(
-            @PathVariable Long userId
+            @RequestParam Long userId
     ) {
         return ResponseEntity.ok(flagQueryUseCase.getRecentFlags(userId));
     }

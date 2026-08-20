@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -97,6 +98,17 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.builder()
                         .error("MethodNotAllowedException")
                         .message("지원하지 않는 요청 메서드입니다: " + e.getMethod())
+                        .build());
+    }
+
+    @ExceptionHandler(ServletRequestBindingException.class)
+    public ResponseEntity<ErrorResponse> handleRequestBinding(ServletRequestBindingException e) {
+        log.warn("[Request Binding] {}", e.getMessage());
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.builder()
+                        .error("InvalidRequestException")
+                        .message("요청 파라미터가 올바르지 않습니다.")
                         .build());
     }
 
