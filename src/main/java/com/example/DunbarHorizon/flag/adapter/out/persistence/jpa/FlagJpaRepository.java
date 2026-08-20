@@ -55,7 +55,9 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
            "ORDER BY f.createdAt DESC")
     List<Flag> findRecentByUserId(@Param("userId") Long userId, Pageable pageable);
 
+    // @SQLRestriction은 벌크 DELETE에도 적용된다. JPQL로 쓰면 지우려는 소프트 삭제 행이
+    // 정확히 걸러져 한 건도 지워지지 않으므로 네이티브 쿼리로 우회한다.
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("DELETE FROM Flag f WHERE f.id IN :ids")
+    @Query(value = "DELETE FROM flags WHERE id IN (:ids)", nativeQuery = true)
     void hardDeleteByIdsIn(@Param("ids") Collection<Long> ids);
 }
