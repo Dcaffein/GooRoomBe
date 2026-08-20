@@ -6,9 +6,10 @@ import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagJpaReposit
 import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagMemorialJpaRepository;
 import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagParticipantJpaRepository;
 import com.example.DunbarHorizon.flag.application.port.out.FlagMaintenancePort;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -18,15 +19,34 @@ import java.util.List;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class FlagMaintenanceAdapter implements FlagMaintenancePort {
+
+    private static final int CHUNK_SIZE = 500;
 
     private final FlagJpaRepository flagJpaRepository;
     private final FlagParticipantJpaRepository participantRepositoryAdapter;
     private final FlagMemorialJpaRepository memorialRepositoryAdapter;
     private final FlagCommentJpaRepository commentRepositoryAdapter;
     private final FlagInvitationJpaRepository invitationJpaRepository;
-    private final TransactionTemplate transactionTemplate;
+    private final TransactionTemplate chunkTransaction;
+
+    public FlagMaintenanceAdapter(FlagJpaRepository flagJpaRepository,
+                                  FlagParticipantJpaRepository participantRepositoryAdapter,
+                                  FlagMemorialJpaRepository memorialRepositoryAdapter,
+                                  FlagCommentJpaRepository commentRepositoryAdapter,
+                                  FlagInvitationJpaRepository invitationJpaRepository,
+                                  PlatformTransactionManager transactionManager) {
+        this.flagJpaRepository = flagJpaRepository;
+        this.participantRepositoryAdapter = participantRepositoryAdapter;
+        this.memorialRepositoryAdapter = memorialRepositoryAdapter;
+        this.commentRepositoryAdapter = commentRepositoryAdapter;
+        this.invitationJpaRepository = invitationJpaRepository;
+
+        // 청크마다 독립 트랜잭션을 연다. 기본 전파(REQUIRED)면 호출자가 트랜잭션을 열고 있을 때
+        // 합류해버려 청크 분리가 무의미해진다.
+        this.chunkTransaction = new TransactionTemplate(transactionManager);
+        this.chunkTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     @Override
     public List<Long> findIdsReadyForHardDelete(LocalDateTime bufferTime) {
@@ -36,13 +56,12 @@ public class FlagMaintenanceAdapter implements FlagMaintenancePort {
     @Override
     public void purgeFlagsAndRelatedData(Collection<Long> flagIds) {
         List<Long> idList = new ArrayList<>(flagIds);
-        int chunkSize = 500;
 
-        for (int i = 0; i < idList.size(); i += chunkSize) {
-            int end = Math.min(i + chunkSize, idList.size());
+        for (int i = 0; i < idList.size(); i += CHUNK_SIZE) {
+            int end = Math.min(i + CHUNK_SIZE, idList.size());
             List<Long> chunk = idList.subList(i, end);
 
-            transactionTemplate.execute(status -> {
+            chunkTransaction.execute(status -> {
                 participantRepositoryAdapter.hardDeleteByFlagIdsIn(chunk);
                 memorialRepositoryAdapter.hardDeleteByFlagIdsIn(chunk);
                 commentRepositoryAdapter.hardDeleteByFlagIdsIn(chunk);
