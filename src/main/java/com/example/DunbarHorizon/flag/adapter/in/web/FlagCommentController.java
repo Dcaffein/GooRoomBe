@@ -15,14 +15,13 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class FlagCommentController {
 
     private final FlagCommentCommandUseCase flagCommentCommandUseCase;
     private final FlagCommentQueryUseCase commentQueryUseCase;
 
-    @GetMapping("/flags/{flagId}/comments")
+    @GetMapping("/api/v1/flags/{flagId}/comments")
     public ResponseEntity<List<CommentResult>> getComments(
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId
@@ -31,12 +30,12 @@ public class FlagCommentController {
         return ResponseEntity.ok(commentTree);
     }
 
-    @GetMapping("/flags/{flagId}/comments/count")
+    @GetMapping("/api/v1/flags/{flagId}/comments/count")
     public ResponseEntity<Long> getCommentCount(@PathVariable Long flagId) {
         return ResponseEntity.ok(commentQueryUseCase.getCommentCount(flagId));
     }
 
-    @PostMapping("/flags/{flagId}/comments")
+    @PostMapping("/api/v1/flags/{flagId}/comments")
     public ResponseEntity<Long> createRootComment(
             @PathVariable Long flagId,
             @CurrentUserId Long currentUserId,
@@ -48,7 +47,7 @@ public class FlagCommentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(commentId);
     }
 
-    @PostMapping("/comments/{parentId}/replies")
+    @PostMapping("/api/v1/comments/{parentId}/replies")
     public ResponseEntity<Long> createReply(
             @PathVariable Long parentId,
             @CurrentUserId Long currentUserId,
@@ -60,7 +59,7 @@ public class FlagCommentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(replyId);
     }
 
-    @PatchMapping("/comments/{commentId}")
+    @PatchMapping("/api/v1/comments/{commentId}")
     public ResponseEntity<Void> updateComment(
             @PathVariable Long commentId,
             @CurrentUserId Long currentUserId,
@@ -72,7 +71,7 @@ public class FlagCommentController {
         return ResponseEntity.ok().build();
     }
 
-    @DeleteMapping("/comments/{commentId}")
+    @DeleteMapping("/api/v1/comments/{commentId}")
     public ResponseEntity<Void> deleteComment(
             @PathVariable Long commentId,
             @CurrentUserId Long currentUserId

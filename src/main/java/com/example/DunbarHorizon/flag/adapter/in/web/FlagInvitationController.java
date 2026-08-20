@@ -1,11 +1,14 @@
 package com.example.DunbarHorizon.flag.adapter.in.web;
 
+import com.example.DunbarHorizon.flag.adapter.in.web.dto.FlagInviteRequest;
 import com.example.DunbarHorizon.flag.application.dto.result.ReceivedFlagInvitationResult;
 import com.example.DunbarHorizon.flag.application.dto.result.SentFlagInvitationResult;
 import com.example.DunbarHorizon.flag.application.port.in.FlagInvitationQueryUseCase;
 import com.example.DunbarHorizon.flag.application.port.in.FlagInvitationUseCase;
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +21,15 @@ public class FlagInvitationController {
 
     private final FlagInvitationUseCase flagInvitationUseCase;
     private final FlagInvitationQueryUseCase flagInvitationQueryUseCase;
+
+    @PostMapping
+    public ResponseEntity<Long> invite(
+            @CurrentUserId Long currentUserId,
+            @RequestBody @Valid FlagInviteRequest request
+    ) {
+        Long invitationId = flagInvitationUseCase.invite(request.flagId(), currentUserId, request.inviteeId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(invitationId);
+    }
 
     @GetMapping("/received")
     public ResponseEntity<List<ReceivedFlagInvitationResult>> getReceived(

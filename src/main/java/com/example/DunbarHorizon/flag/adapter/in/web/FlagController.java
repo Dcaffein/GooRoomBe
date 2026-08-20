@@ -1,6 +1,8 @@
 package com.example.DunbarHorizon.flag.adapter.in.web;
 
 import com.example.DunbarHorizon.flag.adapter.in.web.dto.*;
+import com.example.DunbarHorizon.flag.application.dto.result.FlagDetailResult;
+import com.example.DunbarHorizon.flag.application.dto.result.FlagResult;
 import com.example.DunbarHorizon.flag.application.port.in.*;
 import com.example.DunbarHorizon.flag.application.port.in.command.*;
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
@@ -9,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/flags")
@@ -19,6 +23,7 @@ public class FlagController {
     private final FlagManagementUseCase flagManagementUseCase;
     private final FlagParticipationUseCase flagParticipationUseCase;
     private final FlagInvitationUseCase flagInvitationUseCase;
+    private final FlagQueryUseCase flagQueryUseCase;
 
     @PostMapping
     public ResponseEntity<Long> createFlag(
@@ -124,13 +129,42 @@ public class FlagController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/{flagId}/invitations")
-    public ResponseEntity<Long> invite(
-            @PathVariable Long flagId,
+
+    @GetMapping("/me")
+    public ResponseEntity<List<FlagResult>> getMyFlagsByRole(
             @CurrentUserId Long currentUserId,
-            @RequestBody @Valid FlagInviteRequest request
+            @RequestParam FlagRole role
     ) {
-        Long invitationId = flagInvitationUseCase.invite(flagId, currentUserId, request.inviteeId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(invitationId);
+        return ResponseEntity.ok(flagQueryUseCase.getFlagsByRole(currentUserId, role));
+    }
+
+    @GetMapping("/friends")
+    public ResponseEntity<List<FlagResult>> getFriendFlags(
+            @CurrentUserId Long currentUserId
+    ) {
+        return ResponseEntity.ok(flagQueryUseCase.getFriendFlags(currentUserId));
+    }
+
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<List<FlagResult>> getUserFlagsByRole(
+            @PathVariable Long userId,
+            @RequestParam FlagRole role
+    ) {
+        return ResponseEntity.ok(flagQueryUseCase.getFlagsByRole(userId, role));
+    }
+
+    @GetMapping("/users/{userId}/recent")
+    public ResponseEntity<List<FlagResult>> getRecentFlags(
+            @PathVariable Long userId
+    ) {
+        return ResponseEntity.ok(flagQueryUseCase.getRecentFlags(userId));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<FlagDetailResult> getFlagDetail(
+            @PathVariable Long id,
+            @CurrentUserId Long currentUserId
+    ) {
+        return ResponseEntity.ok(flagQueryUseCase.getFlagDetail(id, currentUserId));
     }
 }

@@ -1,121 +1,135 @@
-# PLAN — Flag 조회 쿼리에서 상태 어휘 제거
+# PLAN — flag 컨트롤러 URL 소유권 정리
 
-## 도메인 수정 승인 요청
+## 목표
 
-`FlagRepository`는 `flag/domain/flag/repository/`에 위치한 도메인 계층 파일이다.
-본 작업은 이 인터페이스의 **메서드 시그니처를 변경**한다 (아래 "변경 파일 목록" 참조).
-도메인 엔티티(`Flag`, `FlagSchedule`, `FlagStatus`)의 필드·로직은 변경하지 않는다.
+컨트롤러 분해 축을 **하위 리소스**로 통일하여 URL과 클래스가 1:1로 대응하게 만든다.
+커밋 1개. API 표면 변화는 초대 생성 엔드포인트 하나뿐이다.
 
-## 작업 목표
+## 현황
 
-영속성 계층이 `FlagStatus` 분류 체계를 자체적으로 판단하는 구조를 제거한다.
-DB 쿼리는 스케줄 필드에 대한 비교 술어만 표현하고, 상태 해석의 권위는
-`FlagSchedule.calculateStatus()` 하나로 단일화한다.
+| 컨트롤러 | 축 | `@RequestMapping` | 엔드포인트 |
+|---|---|---|---|
+| `FlagController` | 리소스(명령) | `/api/v1/flags` | 10 |
+| `FlagQueryController` | **CQRS(조회)** | `/api/v1/flags` | 5 |
+| `FlagMemorialController` | 하위 리소스 | `/api/v1/flags` | 5 |
+| `FlagCommentController` | 하위 리소스 | **`/api/v1`** | 6 |
+| `FlagInvitationController` | 하위 리소스 | `/api/v1/flag-invitations` | 5 |
 
-## 현황 분석
+**1. 분해 축이 두 개 섞여 있다.** CQRS 축은 URL에 흔적이 남지 않아 `/api/v1/flags`
+하나를 두 클래스가 나눠 갖는 상태를 재생산한다.
 
-### 1. 상태 규칙이 두 곳에 정의되어 있고 경계가 어긋난다
+**2. `FlagCommentController.java:18`의 `@RequestMapping("/api/v1")`** 이 flag과 무관한
+URL 공간까지 클래스 스코프로 선점한다. 메서드에 전체 경로가 있어 동작은 정상이나
+클래스 선언만으로 담당 범위를 알 수 없다.
 
-`FlagStatus`는 저장 컬럼이 아니라 `FlagSchedule.calculateStatus()`가 시각으로부터
-파생하는 값이다. 그런데 `FlagJpaRepository`가 같은 규칙을 JPQL로 다시 정의하고 있다.
+**3. 초대 리소스가 두 클래스에 쪼개져 있다.** 생성만 `FlagController.java:127`의
+`POST /api/v1/flags/{flagId}/invitations`, 나머지(수락·거절·취소·조회)는
+`FlagInvitationController`의 `/api/v1/flag-invitations`. 루트가 둘인 것 자체가 아니라
+"생성만 중첩"이라는 분할에 규칙이 없는 것이 문제다.
 
-| 상태 | `FlagSchedule.calculateStatus` | `FlagJpaRepository` JPQL | 일치 |
-|------|-------------------------------|--------------------------|------|
-| RECRUITING | `now.isBefore(deadline)` | `deadline > :now` | O |
-| IN_ACTIVITY | `now.isAfter(start)` | `start <= :now` | **X** |
-| ENDED | `now.isAfter(end)` | `end <= :now` | **X** |
+**4. `FlagInvitationControllerTest`가 없다.** `invite()`·`updateInvitePermission()`도
+컨트롤러 테스트가 없다 (`src/test/.../flag/adapter/in/web/`에 `invitations` 문자열 0건).
 
-`now == startDateTime` 정각에 도메인은 `WAITING`, 쿼리는 `IN_ACTIVITY`로 판단한다.
-`endDateTime` 경계도 같은 방식으로 갈린다.
-
-### 2. 네 갈래 중 한 갈래만 사용된다
-
-`FlagRepository.findAllByHostIdsAndStatus`의 호출부는 `FlagQueryService.java:38`
-단 한 곳이며, 인자는 항상 `FlagStatus.RECRUITING`이다.
-
-따라서 아래는 전부 죽은 코드다.
-- `FlagJpaRepository`의 `findBeforeActivityByHostIds`, `findInProgressByHostIds`, `findEndedByHostIds`
-- `FlagRepositoryAdapter.java:91-97`의 `switch` 전체
-- `default -> throw` 분기 (`FlagStatus` 4개 값이 모두 `case`에 존재하므로 도달 불가)
-
-### 3. 어댑터가 기준 시각을 자체 결정한다
-
-`FlagRepositoryAdapter.java:90`에서 `LocalDateTime.now()`를 직접 호출한다.
-이 때문에 쿼리 결과와 `calculateStatus(now)`를 비교하는 검증이 두 시각의 미세한
-차이로 불안정해진다.
-
-### 4. 동치성을 보증하는 테스트가 없다
-
-`flag/adapter/out/persistence/`에는 `FlagInvitationJpaRepositoryTest`만 존재하고
-`Flag` 조회 쿼리에 대한 리포지토리 테스트가 없다.
-
-## 변경 파일 목록
+## 변경 파일
 
 | 파일 | 할 일 |
 |------|------|
-| `flag/domain/flag/repository/FlagRepository.java` | `findAllByHostIdsAndStatus(Set, FlagStatus)` → `findByHostIdsAndDeadlineAfter(Set<Long>, LocalDateTime asOf)`로 교체. `FlagStatus` import 제거 |
-| `flag/adapter/out/persistence/FlagRepositoryAdapter.java` | `switch`와 `LocalDateTime.now()` 호출 제거. `asOf`를 그대로 위임. 빈 컬렉션 가드는 유지 |
-| `flag/adapter/out/persistence/jpa/FlagJpaRepository.java` | `findRecruitingByHostIds` → `findByHostIdsAndDeadlineAfter`로 리네임. `findBeforeActivityByHostIds`·`findInProgressByHostIds`·`findEndedByHostIds` 3개 삭제 |
-| `flag/application/service/flag/FlagQueryService.java` | `getFriendFlags`에서 `LocalDateTime now`를 한 번 확보해 전달 |
-| `flag/adapter/out/persistence/FlagJpaRepositoryTest.java` *(신규)* | 동치성 테스트 |
+| `FlagInvitationController.java` | `invite()` 이관받아 `POST /api/v1/flag-invitations`로 매핑(`@PathVariable flagId` 제거). 클래스 레벨 `@RequestMapping`은 유지 |
+| `FlagController.java` | `invite()` 제거. `FlagQueryController`의 5개 흡수 → `FlagQueryUseCase` 의존 추가 |
+| `FlagQueryController.java` | **삭제** |
+| `FlagCommentController.java` | 클래스 레벨 `@RequestMapping` 제거, 메서드에 전체 경로 명시 |
+| `FlagInviteRequest.java` | `flagId` 추가 → `(@NotNull Long flagId, @NotNull Long inviteeId)` |
+| `FlagQueryControllerTest.java` | `FlagControllerTest`로 병합 후 삭제 |
+| `FlagControllerTest.java` | 흡수한 조회 테스트 5건 추가 |
+| `FlagInvitationControllerTest.java` | **신규.** 기존 5개 + 이관받은 `invite()` |
 
-## 구현 방향
+`FlagMemorialController`는 변경 없다 (이미 하위 리소스 축).
+`FlagInvitationUseCase.invite(Long flagId, Long inviterId, Long inviteeId)` 시그니처는
+그대로이므로 서비스·도메인 계층은 무변경이다.
 
-### 네이밍 원칙
+### 완료 시점
 
-DB 쿼리 이름에는 **스케줄 필드에 대한 비교 술어만** 남긴다.
-`Recruiting`, `BeforeActivity`, `InProgress`, `Ended` 같은 상태 어휘는 도메인 소유다.
+| 컨트롤러 | 담당 URL |
+|---|---|
+| `FlagController` | `/api/v1/flags` — 생성·수정·삭제·참여자·**조회** |
+| `FlagCommentController` | `/api/v1/flags/{flagId}/comments`, `/api/v1/comments/{id}` |
+| `FlagMemorialController` | `/api/v1/flags/{flagId}/memorials`, `/api/v1/flags/memorials/{id}` |
+| `FlagInvitationController` | `/api/v1/flag-invitations` **하나만** |
 
-```java
-List<Flag> findByHostIdsAndDeadlineAfter(Set<Long> hostIds, LocalDateTime asOf);
-```
+## 설계 판단
 
-Spring Data 파생 문법은 따르지 않는다. `@Query`가 붙으면 이름 파싱이 일어나지 않으며,
-파생 문법을 그대로 지키면 `findAllByHostIdInAndScheduleDeadlineAfter`처럼
-임베더블 매핑 구조가 이름으로 노출된다.
+### 초대는 평평한 루트로 모은다
 
-### 동치성 근거
+반대 방향(전부 `/flags/{flagId}/invitations` 아래로)은 성립하지 않는다.
 
-`FlagSchedule.validateTimeOrder`가 `deadline <= start < end`를 보장하므로,
-`asOf < deadline`이면 `calculateStatus`의 ENDED·IN_ACTIVITY 분기는 반드시 거짓이 되고
-RECRUITING에 도달한다. 즉 `deadline > :asOf`는 RECRUITING과 **정확히 동치**이며,
-서비스 측 후처리 필터가 필요 없다.
+- `GET /received`·`/sent`는 flagId를 받지 않는다(`FlagInvitationController:22-34`,
+  리포지토리도 `inviteeId`/`inviterId`만으로 조회). 중첩하면 "그 플래그에서 받은 초대"로
+  의미가 바뀐다
+- `invitationId`가 전역 유일하므로 경로의 flagId는 중복 정보다. 무시하면 잘못된 flagId가
+  통과하고, 검증하면 소득 없는 코드가 는다
 
-### 기준 시각 호이스팅
+중첩 루트를 없애도 잃는 것이 없다. 거기 걸린 엔드포인트는 생성 하나뿐이고, 이미
+`inviteeId`를 본문으로 받으므로 flagId만 본문으로 옮기면 된다. 플래그 단위 초대 조회는
+HTTP로 노출돼 있지 않다 (`findPendingInviteeIdsByFlagId`는 `FlagEncoreInvitationListener:40`의
+중복 초대 필터링용). 나중에 필요해지면 `GET /api/v1/flag-invitations?flagId=...`로 받는다.
 
-`asOf`를 호출자가 넘기도록 바꾼다. 목적은 두 가지다.
-- 쿼리와 `calculateStatus`가 같은 시각을 보게 하여 경계 테스트를 결정적으로 만든다
-- `getFriendFlags` 한 번의 호출 안에서 시각이 일관된다
+### 클래스 레벨 `@RequestMapping`
 
-## 예상 사이드 이펙트
+한 클래스가 두 개 이상의 URL 루트를 담당하면 쓰지 않는다. 공통 접두사가 없는데 붙이면
+`/api/v1` 같은 과도하게 넓은 선언이 나온다. 이번에 해당하는 것은 `FlagCommentController`
+하나뿐이다. `FlagInvitationController`는 루트가 하나로 모이므로 유지한다.
 
-- **API 응답 변화 없음.** `GET /api/v1/flags/friends`의 결과 집합은 동일하다
-  (기존 `findRecruitingByHostIds`와 술어가 같음).
-- **`FlagStatus`는 삭제하지 않는다.** `Flag.isRecruiting()`, `unparticipate`,
-  `FlagDeletedEvent` 등에서 계속 사용된다. 이번 작업은 리포지토리 계층에서만 걷어낸다.
-- **`FlagQueryServiceTest`에는 `getFriendFlags` 테스트가 없다.** 기존 목 스텁 수정이 아니라
-  신규 테스트 추가로 처리한다.
-- 삭제하는 JPQL 3개는 호출부가 없으므로 컴파일 영향 없음.
+### `FlagController` 크기
 
-## 범위 외 (Out of Scope)
+10 → 14개가 된다. 분리 기준이 없는 분리보다 낫다. 크기가 실제로 문제가 되면 다음 축은
+참여자 하위 리소스(`/flags/{id}/participants` 3개 → `FlagParticipantController`)이며,
+하위 리소스 축과 일관되므로 나중에 떼어내도 규칙이 깨지지 않는다. 이번에는 하지 않는다.
 
-- **`flags.host_id` 인덱스 부재.** `@Table`에 `@Index` 선언이 없고 마이그레이션
-  스크립트도 없어 `IN :hostIds` 조회가 현재 풀스캔이다. 개선 여지가 있으나
-  DDL 변경이라 별도 작업으로 분리한다.
-- **컨트롤러·서비스 교통정리.** API 표면을 건드리므로 별도 브랜치로 분리한다.
-- 상태 컬럼 저장(비정규화) 방식으로의 전환. 현 규모에서 정합성 비용이 이득을 넘는다.
+## 파괴 변경
 
-## 테스트 전략
+`POST /api/v1/flags/{flagId}/invitations` 삭제 → `POST /api/v1/flag-invitations`(본문에 `flagId`).
 
-`TESTING-GUIDE.md` 기본 프로토콜을 따르되, 신규 리포지토리 테스트 한 건을 추가한다.
+- BE 호출부 없음. 앙코르 자동 초대는 `FlagEncoreInvitationListener`가 유스케이스를 직접 호출한다
+- FE 영향은 `dunbar-horizon-fe/src/app/actions/flag.ts:119` 한 줄. BE 배포와 어긋나면
+  그 사이 초대 생성이 실패한다
+- 유예가 필요하면 구 URL을 `@Deprecated`로 한 릴리스 남길 수 있으나 기본은 즉시 제거
 
-**동치성 테스트** — 고정 시각 `asOf`를 기준으로 경계값 flag들을 심고
-(`deadline` 직전 / 정각 / 직후), 아래 두 집합이 같은지 검증한다.
+## 그 외 영향
 
-- `findByHostIdsAndDeadlineAfter(hostIds, asOf)`의 결과
-- 같은 flag들 중 `schedule.calculateStatus(asOf) == RECRUITING`인 것
+- `FlagController` 생성자 의존 4 → 5. `FlagQueryUseCase`가 들어오고
+  `FlagInvitationUseCase`는 남는다 — `updateInvitePermission()`(`FlagController.java:116`)이
+  계속 쓰며, 이 URL은 참여자 하위 리소스라 `FlagController`에 남는 것이 축에 맞다
+- 매핑 충돌 없음. `/flags/{id}`와 `/flags/friends`·`/me`·`/users/...`가 한 클래스에 모이지만
+  Spring은 리터럴을 패턴보다 먼저 매칭한다. 이 우선순위 의존이 눈에 보이게 되는 것은 개선이다
 
-이 테스트는 누군가 술어를 수정해 도메인 규칙과 갈라지는 순간 깨진다.
+## 범위 외
 
-**실행 범위:** `FlagJpaRepositoryTest`(신규), `FlagQueryServiceTest`.
-전체 스위트는 돌리지 않는다.
+- **하위 리소스 단건 URL 규칙 통일.** `/api/v1/comments/{id}` vs `/api/v1/flags/memorials/{id}`.
+  파괴 변경이고 영향 엔드포인트가 5개로 더 넓어 별도 안건
+- **`FlagSeedController`.** `@Profile("local")` + `/api/dev/flags`로 URL 공간이 겹치지 않는다
+- **social 도메인 컨트롤러.** flag에서 규칙을 확정한 뒤 적용
+- **서비스 계층 재편.** 컨트롤러와 서비스의 분해 축이 같을 필요는 없다.
+  `FlagCommentCommandService`/`QueryService` 같은 CQRS 쌍은 그대로 둔다
+- **패키지 위치 정규화.** `notification/application/NotificationService`,
+  `trace/application/TraceService`가 `application/service/` 규칙에서 벗어나 있음
+
+## 테스트
+
+`TESTING-GUIDE.md` 프로토콜을 따른다.
+
+**검증 기준: 컨트롤러 테스트의 요청 URL 문자열이 바뀌는 곳은 초대 생성 한 군데뿐이어야 한다.**
+그 외가 바뀌었다면 이관 실수이거나 범위 이탈이다. 클래스 이동과 URL 변경이 한 디프에
+섞이므로 리뷰 시 이 기준으로 URL 문자열을 훑는다. `FlagInvitationControllerTest` 신규
+작성분은 처음부터 최종 URL 기준으로 쓴다.
+
+추가 검증:
+- `flagId` 누락 시 `400` (`@NotNull`)
+- 구 URL `POST /api/v1/flags/{flagId}/invitations` 호출 시 `404`
+
+실행 범위: `FlagControllerTest`, `FlagInvitationControllerTest`,
+`FlagCommentControllerTest`, `FlagMemorialControllerTest`.
+
+## 브랜치
+
+`ai/refactor-flag-deadline-query` 머지 후의 `main`에서 분기,
+`ai/refactor-flag-controller-url-ownership`. 커밋 1개.
