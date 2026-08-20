@@ -1,166 +1,214 @@
-# PLAN — flag 도메인 URL 정리
+# PLAN — task-97: Flag 도메인 정리
 
-## 목표
+## 작업 목표
 
-flag 도메인 32개 엔드포인트의 URL 구조를 확정한다. 다른 도메인은 건드리지 않는다.
-브랜치 `ai/refactor-flag-controller-url-ownership`, `c6594a4`에 이어서 커밋 4개.
+죽은 상태 표현 제거, 도메인 예외의 500 누수 차단, `FlagPreservationPolicy` 계층 위반 제거.
+목적과 의사결정은 `harness/tasks/task-97-flag-domain-cleanup.md` 참조.
 
-## 규칙
+## 도메인 수정 승인 요청
 
-1. URL 경로 하나는 클래스 하나가 담당한다. 분해 축은 하위 리소스.
-2. 부모 없이 존재할 수 없는 자원은 최상위 루트를 갖지 않는다.
-3. 부모를 가로지르는 조회가 있으면 평평한 루트, 없으면 중첩 루트.
-4. 경로는 호출자 기준 스코프, 쿼리 파라미터는 임의 유저 지정.
-5. 컬렉션 루트에 DELETE를 걸지 않는다. 대상을 경로에 명시한다.
+| 대상 | 변경 |
+|---|---|
+| `FlagInvitation` | `status`·`expiresAt` 필드 삭제, `isPending`·`isExpired`·`validatePending`·`validateNotExpired` 삭제 |
+| `FlagInvitationStatus` | enum 삭제 |
+| `FlagStatus` | `isWaiting()`·`isInActivity()` 삭제 |
+| `Flag` | raw 예외 4곳을 도메인 예외로 교체 |
+| `FlagComment`·`FlagMemorial` | raw 예외 각 1곳 교체 |
+| `FlagPreservationPolicy` | `@Transactional`·`save()` 제거 |
+| 신규 예외 3개 | `FlagInvalidCapacityException`, `FlagCommentInvalidContentException`, `FlagMemorialInvalidContentException` |
 
-## 최종 URL 구조
+DB 컬럼은 삭제하지 않는다. `ddl-auto: update`는 컬럼을 지우지 않으므로
+`flag_invitations.status`·`expires_at`은 사용되지 않는 채로 남는다.
 
-### FlagController — `@RequestMapping("/api/v1/flags")`
+## 현황 분석
 
-```
-POST   /api/v1/flags                                        생성 (parentFlagId 있으면 Encore)
-GET    /api/v1/flags?userId={userId}&role={FlagRole}        특정 유저의 Flag (역할별)
-GET    /api/v1/flags?userId={userId}&sort=recent            특정 유저의 최근 Flag 5개
-GET    /api/v1/flags/me?role={FlagRole}                     내 Flag (역할별)
-GET    /api/v1/flags/friends                                친구들의 Flag
-GET    /api/v1/flags/{flagId}                               상세
-DELETE /api/v1/flags/{flagId}                               종료
-PATCH  /api/v1/flags/{flagId}/details                       제목·설명 수정
-PATCH  /api/v1/flags/{flagId}/capacity                      정원 수정
-PUT    /api/v1/flags/{flagId}/schedule                      일정 교체
-PATCH  /api/v1/flags/{flagId}/schedule/deadline             모집 마감
-POST   /api/v1/flags/{flagId}/participants                  참여
-DELETE /api/v1/flags/{flagId}/participants/me               탈퇴
-PATCH  /api/v1/flags/{flagId}/participants/{participantId}  Participant 수정 (canInvite)
-```
-
-`GET /api/v1/flags`는 `@GetMapping(params = ...)`으로 라우팅한다.
-파라미터가 없으면 매칭되는 핸들러가 없다 — 전체 Flag 목록은 존재하지 않는다.
-
-### FlagCommentController — `@RequestMapping("/api/v1/flags/{flagId}/comments")`
-
-```
-GET    /api/v1/flags/{flagId}/comments                      트리 조회
-GET    /api/v1/flags/{flagId}/comments/count                개수
-POST   /api/v1/flags/{flagId}/comments                      루트 Comment 작성
-POST   /api/v1/flags/{flagId}/comments/{parentId}/replies   답글 작성
-PATCH  /api/v1/flags/{flagId}/comments/{commentId}          수정
-DELETE /api/v1/flags/{flagId}/comments/{commentId}          삭제
-```
-
-### FlagMemorialController — `@RequestMapping("/api/v1/flags/{flagId}/memorials")`
-
-```
-POST   /api/v1/flags/{flagId}/memorials                     작성
-GET    /api/v1/flags/{flagId}/memorials                     목록
-GET    /api/v1/flags/{flagId}/memorials/count               개수
-PATCH  /api/v1/flags/{flagId}/memorials/{memorialId}        수정
-DELETE /api/v1/flags/{flagId}/memorials/{memorialId}        삭제
-```
-
-### FlagInvitationController — `@RequestMapping("/api/v1/flag-invitations")`
-
-```
-POST   /api/v1/flag-invitations                             생성 (본문에 flagId)
-GET    /api/v1/flag-invitations/received                    받은 Invitation
-GET    /api/v1/flag-invitations/sent                        보낸 Invitation
-POST   /api/v1/flag-invitations/{invitationId}/accept       수락 (invitee)
-POST   /api/v1/flag-invitations/{invitationId}/reject       거절 (invitee)
-DELETE /api/v1/flag-invitations/{invitationId}              철회 (inviter)
-```
-
-### FlagSeedController — `@RequestMapping("/api/dev/flags")` · `@Profile("local")`
-
-```
-POST   /api/dev/flags/seed
-```
-
-## 서비스 계층
-
-Comment·Memorial 중첩으로 경로에 `flagId`가 생겼다. 유스케이스가 받아 소유를 검증하고,
-어긋나면 `404`를 던진다. 작성자 검증 앞에 둔다.
+### 1. `FlagInvitation.status`가 변경되지 않는다
 
 ```java
-// FlagCommentCommandUseCase
-Long createRootComment(Long flagId, Long userId, String content, boolean isPrivate);
-Long createReply(Long flagId, Long parentId, Long userId, String content, boolean isPrivate);
-void updateComment(Long flagId, Long commentId, Long userId, String content, boolean isPrivate);
-void deleteComment(Long flagId, Long commentId, Long userId);
+private FlagInvitation(...) { this.status = FlagInvitationStatus.PENDING; }   // 유일한 대입
 
-// FlagMemorialCommandUseCase
-Long createMemorial(Long flagId, Long userId, String content);
-void updateMemorial(Long flagId, Long memorialId, Long requesterId, String content);
-void deleteMemorial(Long flagId, Long memorialId, Long requesterId);
+public void accept(Long requesterId) {
+    validateInvitee(requesterId);
+    validatePending();       // status는 항상 PENDING이라 발화 불가
+    validateNotExpired();
+}                            // 대입 없음 → 서비스가 deleteById
 ```
 
-도메인 계층은 무변경이다.
+영향 범위 — `status`를 참조하는 곳 전부.
 
-## 변경 파일
+| 파일 | 내용 |
+|---|---|
+| `FlagInvitation:28,36,66,76` | 필드, 생성자 대입, `isPending()`, `validatePending()` |
+| `FlagInvitationStatus` | `PENDING`만 쓰이고 `ACCEPTED`·`REJECTED`는 사용처 0 |
+| `FlagInvitationJpaRepository:16,18,20,22` | 쿼리 메서드 3개 + JPQL의 `AND fi.status = 'PENDING'` |
+| `FlagInvitationRepositoryAdapter:33,38,47,52` | `FlagInvitationStatus.PENDING` 인자 전달 |
+| `FlagInvitationRepository:16,17` | 포트 메서드 이름의 `Pending` 어휘 |
+| `FlagInvitationManager:65`, `FlagEncoreInvitationListener:40` | 호출부 |
+
+### 2. `expiresAt`이 deadline 스냅샷이다
+
+`FlagInvitation.create(flagId, inviterId, inviteeId, flag.getSchedule().getDeadline())`.
+`PUT /schedule`로 deadline이 바뀌어도 갱신되지 않는다.
+권위 있는 차단은 `accept` → `participateByInvitation` → `Flag.participate()`의
+`isRecruiting()`이 수행한다.
+
+### 3. raw JDK 예외 7곳
+
+`BusinessException`이 아니어서 `GlobalExceptionHandler`의 캐치올 → 500.
+
+| 위치 | 예외 | 도달 |
+|---|---|---|
+| `FlagComment:87` 내용 길이 | `IllegalArgumentException` | **가능** — Comment DTO에 `@Size` 없음 |
+| `Flag:120` 모집 종료 후 탈퇴 | `IllegalStateException` | **가능** |
+| `Flag:100` 호스트 자기참여 | `IllegalStateException` | 불가 — 친구 검사·초대 시 호스트 제외 |
+| `Flag:127` 이미 삭제됨 | `IllegalStateException` | 불가 — `@SQLRestriction` |
+| `Flag:225` capacity < 1 | `IllegalArgumentException` | 불가 — `@Min(1)` |
+| `FlagMemorial:35` 내용 길이 | `IllegalArgumentException` | 불가 — `@Size(max=1000)` |
+| `FlagParticipant:40` 널 검사 | `IllegalArgumentException` | 불가 — **유지 대상** |
+
+### 4. `FlagPreservationPolicy`
+
+```java
+@Component @RequiredArgsConstructor
+@Transactional                                   // 도메인에 들어온 트랜잭션 관리
+public class FlagPreservationPolicy {
+    public void refresh(Long flagId) {
+        Flag flag = flagRepository.findById(flagId).orElseThrow(...);
+        boolean isPreserved = memorialRepository.existsByFlagId(flagId)
+                           || flagRepository.existsByParentId(flagId);
+        flag.updateAutoExpiryExempt(isPreserved);
+        flagRepository.save(flag);               // findById가 관리 상태 → 중복
+    }
+}
+```
+
+호출부 3곳 모두 트랜잭션 안이다 — `FlagMemorialEventListener`·`FlagEncoreEventListener`는
+`BEFORE_COMMIT`(원본 트랜잭션), `FlagDeletionEventListener`는 `AFTER_COMMIT` +
+리스너의 `REQUIRES_NEW`.
+
+## 변경 파일 목록
 
 | 파일 | 할 일 |
 |------|------|
-| `FlagController.java` | 유저 축 조회 쿼리화, `/participants/me`, Participant PATCH, `{flagId}` 통일 |
-| `FlagCommentController.java` | 클래스 레벨 `@RequestMapping` 중첩 경로로 |
-| `FlagMemorialController.java` | 클래스 레벨 `@RequestMapping` 중첩 경로로 |
-| `FlagCommentCommandUseCase.java` + 구현 | `flagId` 추가, 소유 검증 |
-| `FlagMemorialCommandUseCase.java` + 구현 | `flagId` 추가, 소유 검증 |
-| `FlagControllerTest.java` | URL 갱신, Participant PATCH 테스트 신규 |
-| `FlagCommentControllerTest.java` | URL 갱신, 소유 불일치 404 |
-| `FlagMemorialControllerTest.java` | URL 갱신, 소유 불일치 404 |
-| `FlagCommentCommandServiceTest.java` | 소유 검증 케이스 |
-| `FlagMemorialCommandServiceTest.java` | 소유 검증 케이스 |
+| `FlagInvitation.java` | `status`·`expiresAt` 및 관련 메서드 4개 삭제, `create()` 시그니처에서 `expiresAt` 제거 |
+| `FlagInvitationStatus.java` | 삭제 |
+| `FlagInvitationExpiredException.java` | 삭제 |
+| `FlagInvitationRepository.java` | `existsByFlagIdAndInviteeId`, `findInviteeIdsByFlagId`로 리네임 |
+| `FlagInvitationRepositoryAdapter.java` | `PENDING` 인자 제거, 리네임 반영 |
+| `FlagInvitationJpaRepository.java` | 쿼리 메서드에서 `AndStatus` 제거, JPQL의 status 조건 제거 |
+| `FlagInvitationManager.java` | `create()` 호출 인자, `existsPending...` 호출 |
+| `FlagEncoreInvitationListener.java` | `findPendingInviteeIdsByFlagId` 호출 |
+| `FlagStatus.java` | `isWaiting()`·`isInActivity()` 삭제 |
+| `CommentCreateRequest.java`, `CommentUpdateRequest.java` | `@Size(max = 500)` 추가 |
+| `Flag.java` | 라인 100·120·127·225의 예외 교체 |
+| `FlagComment.java`, `FlagMemorial.java` | `validateContent`의 예외 교체 |
+| `FlagInvalidCapacityException.java` | 신규 — `FlagException`, 400 |
+| `FlagCommentInvalidContentException.java` | 신규 — `FlagCommentException`, 400 |
+| `FlagMemorialInvalidContentException.java` | 신규 — `FlagMemorialException`, 400 |
+| `FlagPreservationPolicy.java` | `@Transactional`·`save()` 제거 |
+
+테스트 — `FlagInvitationControllerTest`, `FlagCommentControllerTest`,
+`FlagMemorialControllerTest`, `FlagControllerTest`,
+`FlagCommentCommandServiceTest`, `FlagMemorialCommandServiceTest`,
+`FlagPreservationPolicyTest`, 초대 관련 서비스·도메인 테스트.
+
+## 구현 방향
+
+### 예외 매핑
+
+| 위치 | 변경 후 | 상태 |
+|---|---|---|
+| `Flag:100` 호스트 자기참여 | `FlagAuthorizationException` | 403 |
+| `Flag:120` 모집 종료 후 탈퇴 | `FlagInvalidStatusException` | 409 |
+| `Flag:127` 이미 삭제됨 | `FlagInvalidStatusException` | 409 |
+| `Flag:225` capacity < 1 | `FlagInvalidCapacityException` (신규) | 400 |
+| `FlagComment:87` | `FlagCommentInvalidContentException` (신규) | 400 |
+| `FlagMemorial:35` | `FlagMemorialInvalidContentException` (신규) | 400 |
+| `FlagParticipant:40` | **변경 없음** | — |
+
+신규 3개는 각 도메인의 추상 예외를 상속한다. 기존 예외 중 400을 쓰는 것이 없어
+(`FlagScheduleInvalidException`도 409) 재사용할 수 없다.
+
+### DTO 검증과 도메인 검증을 겹쳐 둔다
+
+Comment DTO에 `@Size(max = 500)`을 붙여도 `FlagComment.validateContent`는 남긴다.
+DTO 검증은 HTTP 경로만 막고, 시드 컨트롤러·이벤트 리스너 같은 내부 경로는 도메인이 막는다.
+컬럼도 `length = 500`이라 세 곳의 상한이 일치해야 한다.
+
+### `FlagInvitation.create()` 시그니처
+
+```java
+// 현재
+create(Long flagId, Long inviterId, Long inviteeId, LocalDateTime expiresAt)
+// 변경 후
+create(Long flagId, Long inviterId, Long inviteeId)
+```
+
+`FlagInvitationManager.invite()`에서 `flag.getSchedule().getDeadline()` 인자를 제거한다.
+`invite()`가 이미 `flag.isRecruiting()`을 검사하므로 생성 시점 차단은 유지된다.
+
+### `FlagPreservationPolicy`의 트랜잭션 계약
+
+`@Transactional`과 `save()`를 함께 제거하면 **호출자의 트랜잭션 안에서 호출되어야 한다**는
+계약이 생긴다. 밖에서 호출하면 조용히 저장되지 않는다.
+클래스 주석 대신 테스트로 고정한다 — 아래 테스트 전략 참조.
+
+클래스 위치와 조회·저장 책임은 그대로 둔다. `Flag.updateAutoExpiryExempt`가
+package-private이라 옮기면 `public`으로 열어야 한다.
+
+## 예상 사이드 이펙트
+
+### 응답 변경 3건
+
+| 경로 | 현재 | 변경 후 |
+|---|---|---|
+| Comment 501자 작성·수정 | `500` | `400` + `validation.content` |
+| 모집 종료 후 탈퇴 | `500` | `409` |
+| 만료된 초대 수락 | `409 FlagInvitationExpiredException` | `409 FlagDeadlinePassedException` |
+
+셋째는 상태 코드가 같고 본문의 `error`·`message`만 바뀐다.
+FE가 예외 이름으로 분기 중이면 영향이 있다.
+
+### DB에 남는 컬럼
+
+`flag_invitations.status`·`expires_at`은 `ddl-auto: update`가 지우지 않으므로
+사용되지 않는 채 남는다. `status`는 `nullable = false`이나 기존 행에 값이 있고
+신규 INSERT에서 컬럼이 빠지므로 **기본값이 없으면 INSERT가 실패한다.**
+적용 전 `flag_invitations` 테이블의 `status`·`expires_at`에 DEFAULT가 있는지 확인하고,
+없으면 컬럼 삭제 또는 DEFAULT 부여가 선행되어야 한다.
+
+### 영향 없음
+
+- URL·API 경로 — 무변경
+- `FlagSchedule.deadline`과 `WAITING` 상태 — 무변경
+- 다른 도메인 — flag 외부에서 `FlagInvitationStatus`를 참조하는 코드 없음
+
+## 테스트 전략
+
+`TESTING-GUIDE.md` 기본 프로토콜을 따른다. 아래만 추가한다.
+
+**응답 변경 3건 회귀** — Comment 501자 → 400 + `validation.content`,
+모집 종료 후 탈퇴 → 409, 만료된 초대 수락 → 409.
+
+**status 제거 후 중복 초대 차단** — `existsByFlagIdAndInviteeId`가 status 조건 없이도
+중복을 거르는지. 기존 초대가 삭제되면 재초대가 가능해야 한다.
+
+**`FlagPreservationPolicy` 통합 테스트** — 기본 프로토콜에서 벗어나는 유일한 항목.
+현재 `FlagPreservationPolicyTest`는 mock 기반이라 `save()` 제거 후 더티 체킹으로
+반영되는지 잡지 못한다. Testcontainers로 트랜잭션 안에서 `refresh()`를 호출하고
+커밋 후 `is_preserved`가 실제로 갱신됐는지 확인한다.
+**이번 작업에서 유일하게 Docker가 필요하다.**
 
 ## 커밋 구성
 
-| | 내용 | 파괴 변경 |
+| | 내용 | 응답 변경 |
 |---|---|---|
-| 1 | 경로 변수 `{flagId}` 통일 | 0 |
-| 2 | 탈퇴 `/participants/me` + Participant PATCH | 2 |
-| 3 | Comment·Memorial 중첩 + 소유 검증 | 5 |
-| 4 | 유저 축 조회 쿼리 파라미터화 | 2 |
+| 1 | `FlagInvitation.status` 및 쿼리 어휘 제거 | 없음 |
+| 2 | `expiresAt` 제거, 죽은 `FlagStatus` 헬퍼 제거 | 만료 시 예외 타입 |
+| 3 | 도메인 예외 정리 + Comment DTO `@Size` | 500 → 400·409 |
+| 4 | `FlagPreservationPolicy` 계층 정리 | 없음 |
 
-## 테스트
+## 브랜치
 
-`TESTING-GUIDE.md` 프로토콜을 따른다.
-
-커밋마다 컨트롤러의 `@RequestMapping` + `@*Mapping`을 파싱해 전후 URL 집합을 diff하고,
-의도한 것만 바뀌었는지 확인한다.
-
-- `GET /api/v1/flags` 파라미터 없이 → `400`
-- `DELETE /api/v1/flags/{flagId}/participants` → `405`
-- 소유 불일치(`/flags/{다른flagId}/comments/{commentId}`) → `404`, Memorial 동일
-- 구 URL(`/api/v1/comments/{id}`, `/api/v1/flags/memorials/{id}`, `/flags/users/{userId}`) → `404`
-
-실행 범위: `FlagControllerTest`, `FlagCommentControllerTest`, `FlagMemorialControllerTest`,
-`FlagInvitationControllerTest`, `FlagCommentCommandServiceTest`, `FlagMemorialCommandServiceTest`.
-`GlobalExceptionHandler`를 건드리므로 `*ControllerTest` 전체도 돌린다.
-
-## FE 대응 목록
-
-파괴 변경 9개, 호출부 10곳. 사용자가 직접 처리한다.
-
-```
-GET    /flags/users/{userId}?role=       →  GET /flags?userId={userId}&role=
-GET    /flags/users/{userId}/recent      →  GET /flags?userId={userId}&sort=recent
-DELETE /flags/{flagId}/participants      →  DELETE /flags/{flagId}/participants/me
-PATCH  .../participants/{pId}/invite-permission  →  PATCH .../participants/{pId}
-POST   /comments/{parentId}/replies      →  POST /flags/{flagId}/comments/{parentId}/replies
-PATCH  /comments/{commentId}             →  PATCH /flags/{flagId}/comments/{commentId}
-DELETE /comments/{commentId}             →  DELETE /flags/{flagId}/comments/{commentId}
-PATCH  /flags/memorials/{id}             →  PATCH /flags/{flagId}/memorials/{memorialId}
-DELETE /flags/memorials/{id}             →  DELETE /flags/{flagId}/memorials/{memorialId}
-```
-
-`FlagComments.tsx:135`, `FlagMemorial.tsx:33`은 `flagId`를 prop으로 갖고 있다.
-`c6594a4`의 Invitation 생성 URL(`flag.ts:119`)도 미대응이다.
-
-## 손대지 않는 것
-
-- `GET /api/v1/flags/me`·`/friends`
-- `PATCH /flags/{flagId}/schedule/deadline` (모집 마감)
-- Invitation의 `accept`·`reject`·`cancel` 형태
-- `/api/v1/flag-invitations` 이름
-- `POST /api/v1/flags`가 `parentFlagId`로 Encore를 가르는 형태
-- 다른 도메인 (account, buzz, social, notification, trace) — 전수 조사에서 8건
-- 서비스 계층 재편, 패키지 위치 정규화, 응답 DTO·상태 코드
-- 프론트엔드
+기존 `ai/refactor-flag-controller-url-ownership`에 이어서 쌓는다.
+`main` 분기 규칙에서 벗어나며 사유는 task-97 「기존 브랜치에 이어 쌓는다」 참조.
