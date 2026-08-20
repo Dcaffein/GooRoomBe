@@ -107,7 +107,8 @@ class FlagQueryServiceTest {
         given(flagRepository.findByHostIdsAndDeadlineAfter(eq(friendIds), any(LocalDateTime.class)))
                 .willReturn(List.of(friendFlag));
         given(flagRepository.countParticipantsByFlagIds(anyCollection())).willReturn(Map.of(1L, 4));
-        given(flagUserPort.findUserInfosByIds(friendIds)).willReturn(Map.of(friendId, userInfo(friendId)));
+        // 친구 전원이 아니라 실제 호스트만 조회한다
+        given(flagUserPort.findUserInfosByIds(Set.of(friendId))).willReturn(Map.of(friendId, userInfo(friendId)));
 
         List<FlagResult> result = flagQueryService.getFriendFlags(HOST_ID);
 

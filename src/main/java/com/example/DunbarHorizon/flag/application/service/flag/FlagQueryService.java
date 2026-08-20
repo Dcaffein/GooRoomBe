@@ -36,8 +36,10 @@ public class FlagQueryService implements FlagQueryUseCase {
         if (friendIds.isEmpty()) return List.of();
 
         List<Flag> recruitingFlags = flagRepository.findByHostIdsAndDeadlineAfter(friendIds, LocalDateTime.now());
+        if (recruitingFlags.isEmpty()) return List.of();
 
-        Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(friendIds);
+        Set<Long> hostIds = recruitingFlags.stream().map(Flag::getHostId).collect(Collectors.toSet());
+        Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(hostIds);
         List<Long> flagIds = recruitingFlags.stream().map(Flag::getId).toList();
         Map<Long, Integer> countMap = flagRepository.countParticipantsByFlagIds(flagIds);
 
