@@ -1,4 +1,4 @@
-package com.example.DunbarHorizon.flag.adapter.in;
+package com.example.DunbarHorizon.flag.adapter.in.scheduler;
 
 import com.example.DunbarHorizon.flag.application.service.flag.FlagExpiryService;
 import lombok.RequiredArgsConstructor;
