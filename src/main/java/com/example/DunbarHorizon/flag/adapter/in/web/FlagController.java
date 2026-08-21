@@ -152,7 +152,7 @@ public class FlagController {
         return ResponseEntity.ok(flagQueryUseCase.getFlagsByRole(userId, role));
     }
 
-    @GetMapping(params = {"userId", "sort=recent"})
+    @GetMapping("/recent")
     public ResponseEntity<List<FlagResult>> getRecentFlags(
             @RequestParam Long userId
     ) {

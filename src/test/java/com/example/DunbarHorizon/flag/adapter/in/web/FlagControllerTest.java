@@ -263,7 +263,7 @@ class FlagControllerTest extends BaseControllerTest {
         Long targetUserId = 2L;
         given(flagQueryUseCase.getRecentFlags(targetUserId)).willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/flags").param("userId", String.valueOf(targetUserId)).param("sort", "recent"))
+        mockMvc.perform(get("/api/v1/flags/recent").param("userId", String.valueOf(targetUserId)))
                 .andExpect(status().isOk());
 
         verify(flagQueryUseCase).getRecentFlags(targetUserId);
@@ -287,6 +287,15 @@ class FlagControllerTest extends BaseControllerTest {
     @DisplayName("파라미터 없는 /api/v1/flags 조회는 400을 반환한다")
     void getFlags_NoParams_Returns400() throws Exception {
         mockMvc.perform(get("/api/v1/flags"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("구 sort=recent 쿼리 형태는 더 이상 매핑되지 않는다")
+    void legacySortRecentParam_Returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/flags")
+                        .param("userId", "2")
+                        .param("sort", "recent"))
                 .andExpect(status().isBadRequest());
     }
 
