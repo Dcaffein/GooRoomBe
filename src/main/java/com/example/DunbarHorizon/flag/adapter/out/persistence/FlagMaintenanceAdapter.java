@@ -54,6 +54,11 @@ public class FlagMaintenanceAdapter implements FlagMaintenancePort {
     }
 
     @Override
+    public int purgeInvitationsOfEndedFlags(LocalDateTime threshold) {
+        return invitationJpaRepository.hardDeleteByFlagEndDateTimeBefore(threshold);
+    }
+
+    @Override
     public void purgeFlagsAndRelatedData(Collection<Long> flagIds) {
         List<Long> idList = new ArrayList<>(flagIds);
 
