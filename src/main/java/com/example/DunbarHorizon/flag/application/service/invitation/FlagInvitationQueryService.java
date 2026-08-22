@@ -39,7 +39,7 @@ public class FlagInvitationQueryService implements FlagInvitationQueryUseCase {
         );
 
         return invitations.stream()
-                .filter(inv -> flagMap.containsKey(inv.getFlagId()) && userMap.containsKey(inv.getInviterId()))
+                .filter(inv -> isRecruiting(flagMap.get(inv.getFlagId())) && userMap.containsKey(inv.getInviterId()))
                 .map(inv -> ReceivedFlagInvitationResult.of(inv, flagMap.get(inv.getFlagId()), userMap.get(inv.getInviterId())))
                 .toList();
     }
@@ -55,9 +55,16 @@ public class FlagInvitationQueryService implements FlagInvitationQueryUseCase {
         );
 
         return invitations.stream()
-                .filter(inv -> flagMap.containsKey(inv.getFlagId()) && userMap.containsKey(inv.getInviteeId()))
+                .filter(inv -> isRecruiting(flagMap.get(inv.getFlagId())) && userMap.containsKey(inv.getInviteeId()))
                 .map(inv -> SentFlagInvitationResult.of(inv, flagMap.get(inv.getFlagId()), userMap.get(inv.getInviteeId())))
                 .toList();
+    }
+
+    // 수락할 수 있는 초대만 노출한다. Flag.participate()가 isRecruiting()을 요구하므로
+    // 모집이 끝난 플래그의 초대는 목록에 남아 있어도 수락 시 FlagDeadlinePassedException이 된다.
+    // flag가 null인 것은 소프트 삭제되어 조회에서 빠진 경우다.
+    private static boolean isRecruiting(Flag flag) {
+        return flag != null && flag.isRecruiting();
     }
 
     private Map<Long, Flag> fetchFlagMap(List<FlagInvitation> invitations, Function<FlagInvitation, Long> idExtractor) {
