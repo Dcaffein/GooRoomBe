@@ -9,9 +9,7 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Getter
-@Table(name = "auths", indexes = {
-        @Index(name = "idx_auth_user_provider", columnList = "user_id, provider")
-})
+@Table(name = "auths")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Auth extends BaseTimeAggregateRoot {
 

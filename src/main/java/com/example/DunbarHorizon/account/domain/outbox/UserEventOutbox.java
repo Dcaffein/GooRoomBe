@@ -10,9 +10,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Getter
-@Table(name = "user_event_outboxes", indexes = {
-        @Index(columnList = "status, createdAt")
-})
+@Table(name = "user_event_outboxes")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserEventOutbox {
 

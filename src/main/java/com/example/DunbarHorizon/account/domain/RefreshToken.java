@@ -12,9 +12,7 @@ import java.time.LocalDateTime;
 @Getter
 @Entity
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "refresh_tokens", indexes = {
-        @Index(name = "idx_rt_user_id", columnList = "userId")
-})
+@Table(name = "refresh_tokens")
 public class RefreshToken extends BaseTimeAggregateRoot {
 
     @Id
