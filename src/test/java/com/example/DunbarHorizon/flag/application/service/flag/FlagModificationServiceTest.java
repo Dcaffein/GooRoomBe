@@ -9,6 +9,7 @@ import com.example.DunbarHorizon.flag.domain.flag.exception.FlagAuthorizationExc
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagInvalidStatusException;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagScheduleInvalidException;
+import com.example.DunbarHorizon.flag.domain.flag.event.FlagMeetingChangedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class FlagManagementServiceTest {
+class FlagModificationServiceTest {
 
     @InjectMocks private FlagModificationService flagModificationService;
 
@@ -165,6 +166,27 @@ class FlagManagementServiceTest {
         // then
         assertThat(flag.getSchedule().getStartDateTime()).isEqualTo(newStart);
         assertThat(flag.getSchedule().getEndDateTime()).isEqualTo(newEnd);
+        assertThat(flag.getDomainEvents()).hasAtLeastOneElementOfType(FlagMeetingChangedEvent.class);
+        verify(flagRepository).save(flag);
+    }
+
+    @Test
+    @DisplayName("모임 시간이 그대로면 일정 변경 이벤트를 등록하지 않는다")
+    void reschedule_SameMeetingTime_DoesNotRegisterEvent() {
+        // given
+        Flag flag = recruitingFlag();
+        given(flagRepository.findById(1L)).willReturn(Optional.of(flag));
+
+        FlagScheduleUpdateCommand command = new FlagScheduleUpdateCommand(
+                1L, HOST_ID, NOW.plusHours(1),
+                flag.getSchedule().getStartDateTime(), flag.getSchedule().getEndDateTime());
+
+        // when
+        flagModificationService.reschedule(command);
+
+        // then
+        assertThat(flag.getSchedule().getDeadline()).isEqualTo(NOW.plusHours(1));
+        assertThat(flag.getDomainEvents()).isEmpty();
     }
 
     @Test

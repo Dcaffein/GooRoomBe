@@ -37,7 +37,9 @@ public class FlagModificationService implements FlagModificationUseCase {
     @Override
     public void reschedule(FlagScheduleUpdateCommand command) {
         FlagSchedule newSchedule = FlagSchedule.of(command.deadline(), command.startDateTime(), command.endDateTime());
-        getFlagOrThrow(command.flagId()).reschedule(command.hostId(), newSchedule);
+        Flag flag = getFlagOrThrow(command.flagId());
+        flag.reschedule(command.hostId(), newSchedule);
+        flagRepository.save(flag);
     }
 
     @Override
