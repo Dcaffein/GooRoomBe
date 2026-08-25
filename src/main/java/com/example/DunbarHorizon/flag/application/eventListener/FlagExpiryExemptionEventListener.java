@@ -14,6 +14,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.List;
 
+/**
+ * "만료 면제가 붙었다"를 "모임이 실제로 열렸다"로 번역하는 자리다.
+ * 성립하는 근거는 면제를 만드는 후기와 앵코르가 종료된 플래그에만 달린다는 것이다
+ * (FlagMemorialFactory, Flag.createEncore). 면제 원천을 추가한다면 그 원천도 같은
+ * 성질을 갖는지 여기서 따져야 한다.
+ */
 @Component
 @RequiredArgsConstructor
 public class FlagExpiryExemptionEventListener {

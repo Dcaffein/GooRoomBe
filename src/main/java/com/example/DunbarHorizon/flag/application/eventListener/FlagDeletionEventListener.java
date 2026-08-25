@@ -35,6 +35,8 @@ public class FlagDeletionEventListener {
         Optional<Flag> encoreResult = flagRepository.findByParentId(event.flagId());
         encoreResult.ifPresent(Flag::severParentLink);
 
+        // 플래그는 방금 소프트 삭제됐지만 flag_participants에는 @SQLRestriction이 없다.
+        // 참여자 행은 퍼지 배치가 나중에 지우므로 이 시점에는 남아 있다.
         List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
 
         if (!participantIds.isEmpty()) {

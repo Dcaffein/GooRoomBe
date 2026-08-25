@@ -182,6 +182,7 @@ public class Flag extends BaseTimeAggregateRoot implements SoftDeletable {
         this.schedule = this.schedule.withDeadline(LocalDateTime.now());
     }
 
+    // 꺼졌다 다시 켜지면 다시 발행된다. 생애 최초 여부는 기록하지 않는다.
     void updateAutoExpiryExempt(boolean value) {
         if (value && !this.autoExpiryExempt) {
             registerEvent(new FlagExpiryExemptedEvent(this.id, this.hostId, this.parentId));

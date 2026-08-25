@@ -34,6 +34,8 @@ public interface FlagParticipantJpaRepository extends JpaRepository<FlagParticip
     @Query("SELECT fp.participantId FROM FlagParticipant fp WHERE fp.flagId = :flagId")
     List<Long> findAllParticipantIdsByFlagId(@Param("flagId") Long flagId);
 
+    // 단건 조회는 참여자 id만 돌려주면 되지만, 묶음 조회는 어느 플래그의 것인지 함께 와야
+    // 플래그별로 나눌 수 있다. 엔티티를 통째로 읽지 않으려고 두 컬럼만 가져온다.
     interface FlagParticipantIdProjection {
         Long getFlagId();
         Long getParticipantId();

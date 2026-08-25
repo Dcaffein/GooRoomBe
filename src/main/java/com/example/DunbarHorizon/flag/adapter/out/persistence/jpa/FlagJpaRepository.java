@@ -32,6 +32,7 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
     @Query("SELECT f FROM Flag f WHERE f.id = :id")
     Optional<Flag> findByIdForUpdate(@Param("id") Long id);
 
+    // @SQLRestriction이 deleted_at IS NULL을 붙이므로 이미 삭제된 행은 자동으로 빠진다.
     @Query("SELECT f.id AS id, f.hostId AS hostId, f.parentId AS parentId FROM Flag f " +
             "WHERE f.schedule.endDateTime < :threshold " +
             "AND f.autoExpiryExempt = false " +
