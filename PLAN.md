@@ -1,262 +1,154 @@
 # PLAN — 플래그 종료 이벤트 정리 (task-103) 구현 방법
 
-브랜치: `ai/fix-flag-conclusion-events` (main에서 분기)
+브랜치: `ai/fix-flag-conclusion-events` (main에서 분기), 커밋 6개
 
 ---
 
 ## 커밋 1 — 삭제 알림 대상
 
-`FlagDeletionEventListener:48`의 비교 대상 하나만 바꾼다.
+`FlagDeletionEventListener`의 비교 대상 하나만 바꾼다.
 
 ```java
-- if (!participantIds.isEmpty() && event.statusAtDeletion() != FlagStatus.RECRUITING) {
-+ if (!participantIds.isEmpty() && event.statusAtDeletion() != FlagStatus.ENDED) {
+- event.statusAtDeletion() != FlagStatus.RECRUITING
++ event.statusAtDeletion() != FlagStatus.ENDED
 ```
 
-`publishNotification`의 문구, `NotificationType`, 수신자 조회는 손대지 않는다.
-
-**테스트:** `FlagDeletionEventListenerTest`에 네 상태 케이스를 추가한다. 이 클래스는
-현재 알림 발행을 한 건도 검증하지 않아서 새로 짜는 것에 가깝다. `eventPublisher`가
-여러 타입을 받으므로 `verify(..., never())`에 인자 타입을 명시한다.
-
-```java
-verify(eventPublisher, never()).publishEvent(any(NotificationEvent.class));
-```
+**테스트:** 이 클래스는 알림 발행을 한 건도 검증하지 않고 있었다. 네 상태 케이스를 새로 짠다.
 
 ## 커밋 2 — 일정 변경 이벤트 유실
 
-`FlagModificationService.reschedule:38-41`에 `save()`를 넣는다.
+`FlagModificationService.reschedule`에 `save()`를 넣는다. Spring Data의 `@DomainEvents`는
+리포지토리의 `save`/`delete` 호출에서만 발행되고 더티 체킹 플러시로는 발행되지 않는다.
+
+`registerEvent` 등록 지점 셋을 호출부의 `save()` 여부와 대조했다. `closeFlag`와
+`FlagHostService.encoreFlag`는 정상이고 `reschedule`만 빠져 있었다.
+
+**테스트:** 목 리포지토리는 `save()`를 불러도 도메인 이벤트를 발행하지 않는다. 발행 유실은
+컨텍스트를 띄워야 잡히므로 `FlagRescheduleEventIntegrationTest`를 만든다.
+`@TestConfiguration`으로 이벤트를 받아 적는 `@EventListener` 빈을 두고 발행 자체를 본다.
+
+## 커밋 3 — 종료 사실을 한 곳으로
 
 ```java
- public void reschedule(FlagScheduleUpdateCommand command) {
-     FlagSchedule newSchedule = FlagSchedule.of(...);
--    getFlagOrThrow(command.flagId()).reschedule(command.hostId(), newSchedule);
-+    Flag flag = getFlagOrThrow(command.flagId());
-+    flag.reschedule(command.hostId(), newSchedule);
-+    flagRepository.save(flag);
- }
-```
-
-Spring Data의 `@DomainEvents`는 리포지토리의 `save`/`delete` 호출에서만 발행된다.
-더티 체킹 플러시로는 발행되지 않아 `Flag.reschedule`이 등록한 `FlagMeetingChangedEvent`가
-버려지고 있었다. 같은 파일 `closeFlag:54`는 `save()`를 부르고 있어서 삭제 알림만 동작했다.
-
-**같은 함정을 밟은 곳이 더 있는지 먼저 확인한다.** `registerEvent` 호출부와 `save()`
-호출 여부를 대조했고 현재 등록 지점은 셋이다.
-
-| 등록 지점 | 호출부 | `save()` |
-|---|---|---|
-| `Flag.delete` | `FlagModificationService.closeFlag` | 있음 |
-| `Flag.reschedule` | `FlagModificationService.reschedule` | **없음 (이 커밋)** |
-| `Flag.createEncore` | `FlagHostService.encoreFlag` | 있음 (반환값을 쓴다) |
-
-**테스트:** 단위 테스트로는 `@DomainEvents` 발행 여부를 잡을 수 없다. 통합 테스트에서
-일정 변경 후 `FlagMeetingChangedEventListener`가 실제로 깨어나는지 확인한다.
-`FlagModificationServiceTest`에는 시간이 그대로면 발행되지 않는 케이스를 넣는다
-(`Flag.isMeetingTimeChanged`가 이미 거른다).
-
-## 커밋 3 — 친밀도 발행을 한 곳으로 모은다
-
-### 3-1. 이벤트와 리스너 신설
-
-```java
-// flag/domain/flag/event/FlagConcludedEvent.java
-public record FlagConcludedEvent(Long flagId, Long hostId, Long parentId) {}
-```
-
-```java
-// flag/application/eventListener/FlagConclusionEventListener.java
-@Component
-@RequiredArgsConstructor
-public class FlagConclusionEventListener {
-
-    private final FlagRepository flagRepository;
-    private final ApplicationEventPublisher eventPublisher;
-
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void handle(FlagConcludedEvent event) {
-        List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
-        if (participantIds.isEmpty()) return;
-
-        InteractionType type = event.parentId() != null
-                ? InteractionType.FLAG_ENDED_ENCORE : InteractionType.FLAG_ENDED;
-        eventPublisher.publishEvent(
-                new BatchMutualInteractionEvent(participantIds, event.hostId(), type));
+public record FlagConcludedEvent(Long flagId, Long hostId, Long parentId, List<Long> participantIds) {
+    public FlagConcludedEvent {
+        if (participantIds == null || participantIds.isEmpty()) throw new IllegalArgumentException(...);
     }
+    public boolean isEncore() { return parentId != null; }
 }
 ```
 
-애노테이션 구성은 기존 `FlagDeletionEventListener`와 동일하게 맞춘다. 소프트 삭제된
-플래그여도 `flag_participants`에는 `@SQLRestriction`이 없어 조회된다. 퍼지는 소프트
-삭제 12시간 뒤 배치라 리스너 실행 시점에는 행이 남아 있다.
+`FlagConclusionEventListener`가 `isEncore()`로 `InteractionType`을 고르고
+`BatchMutualInteractionEvent`로 넘긴다. **리포지토리 의존이 없다.**
+`@Transactional(REQUIRES_NEW)`는 DB 접근 때문이 아니라, 여기서 발행하는 이벤트를 받는 쪽이
+`@TransactionalEventListener(AFTER_COMMIT)`이라 트랜잭션이 없으면 전달되지 않아서다.
 
-### 3-2. 삭제 리스너에서 친밀도 로직을 걷어낸다
-
-`FlagDeletionEventListener`에서 `isMeetingHeld`, `publishInteractionEvents`,
-`InteractionType`·`BatchMutualInteractionEvent` import를 제거하고 발행으로 바꾼다.
+`FlagDeletionEventListener`는 `isEmpty()` 검사를 앞으로 빼고 두 분기를 `if/else`로 묶는다.
+`isMeetingHeld`, `publishInteractionEvents`, `InteractionType` import를 제거한다.
 
 ```java
-private void notifyParticipants(FlagDeletedEvent event, Long hostId) {
-    List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
-    if (participantIds.isEmpty()) return;
-
-    if (event.statusAtDeletion() != FlagStatus.ENDED) {
-        publishNotification(participantIds, event.flagTitle());
-    } else {
-        eventPublisher.publishEvent(
-                new FlagConcludedEvent(event.flagId(), hostId, event.parentId()));
-    }
+if (event.statusAtDeletion() == FlagStatus.ENDED) {
+    eventPublisher.publishEvent(new FlagConcludedEvent(..., participantIds));
+} else {
+    notifyFlagCancel(participantIds, event.flagTitle());
 }
 ```
 
-`isEmpty()` 검사를 앞으로 빼서 두 분기에서 반복하던 것을 없앤다. `if/else`로 두면
-두 분기가 배타적이라는 사실이 구조에 드러난다. **기존 동작에서 `IN_ACTIVITY`가
-친밀도 대상에서 빠지는 지점이 여기다.**
+## 커밋 4 — 자동 만료와 면제 획득 경로
 
-`FlagConcludedEvent`는 이 리스너의 `REQUIRES_NEW` 트랜잭션 안에서 발행되므로
-`AFTER_COMMIT` 리스너가 정상적으로 받는다. 지금 `BatchMutualInteractionEvent`가
-같은 방식으로 동작하고 있다.
+### 4-1. 리포지토리
 
-**테스트:** `FlagConclusionEventListenerTest`를 새로 만든다. `parentId` 유무로
-타입이 갈리는지, 참여자가 비면 발행하지 않는지.
-
-## 커밋 4 — 나머지 두 경로
-
-### 4-1. 만료 스윕
-
-현재 벌크 UPDATE 하나를 **대상 조회 → UPDATE → 발행** 세 단계로 나눈다.
-
-**조회 조건은 바뀌지 않는다.** 지금 UPDATE의 WHERE와 같은 집합이다. 조회를 따로 두는
-이유는 두 가지다.
-
-- 벌크 UPDATE는 **건수만 돌려준다.** 플래그마다 이벤트를 발행하려면 id가 필요하다
-- 이벤트가 `hostId`와 `parentId`를 **직접 실어야 한다.** 리스너가 도는 시점에 그
-  플래그는 이미 소프트 삭제된 상태이고, `findById`는 `@SQLRestriction` 때문에
-  빈 결과를 준다. 나중에 되읽을 수 없어서 발행 시점에 담아 보낸다.
-  기존 `FlagDeletedEvent`가 `hostId`·`parentId`를 들고 다니는 것도 같은 이유다
-
-엔티티를 통째로 로드하지 않고 프로젝션으로 세 필드만 가져온다.
+`expireAllExceedingThreshold` 하나를 둘로 나눈다. **조회 조건은 기존 UPDATE의 WHERE와 같다.**
+`@SQLRestriction`이 `deleted_at IS NULL`을 붙이므로 명시할 것은 둘뿐이다.
 
 ```java
-interface FlagExpiryTarget {
-    Long getId();
-    Long getHostId();
-    Long getParentId();
-}
-
 @Query("SELECT f.id AS id, f.hostId AS hostId, f.parentId AS parentId FROM Flag f " +
-       "WHERE f.schedule.endDateTime < :threshold AND f.autoExpiryExempt = false")
-List<FlagExpiryTarget> findExpiryTargets(@Param("threshold") LocalDateTime threshold,
-                                         Pageable pageable);
-```
+       "WHERE f.schedule.endDateTime < :threshold AND f.autoExpiryExempt = false " +
+       "ORDER BY f.schedule.endDateTime ASC")
+List<FlagExpiryTarget> findExpiryTargets(LocalDateTime threshold, Pageable pageable);
 
-`@SQLRestriction`이 `deleted_at IS NULL`을 자동으로 붙이므로 명시할 조건은 둘뿐이다.
-현재 UPDATE의 WHERE와 같은 집합이 나온다. `V3__add_flag_indexes.sql`의
-`idx_flags_end_date_time`을 그대로 탄다.
-
-`expireAllExceedingThreshold`는 id 목록을 받는 형태로 바꾼다.
-
-```java
 @Modifying(clearAutomatically = true)
 @Query("UPDATE Flag f SET f.deletedAt = :now WHERE f.id IN :ids AND f.deletedAt IS NULL")
-int expireByIds(@Param("ids") Collection<Long> ids, @Param("now") LocalDateTime now);
+int expireByIds(Collection<Long> ids, LocalDateTime now);
 ```
 
-서비스는 이렇게 된다.
+엔티티 대신 프로젝션으로 세 필드만 읽는다. 곧 같은 행을 벌크 UPDATE하므로 영속성
+컨텍스트에 올리지 않는 편이 낫고, 이벤트가 `hostId`·`parentId`를 실어야 하는데 소프트 삭제
+후에는 되읽을 수 없다.
+
+참여자 묶음 조회를 추가한다. 단건 조회는 참여자 id만 돌려주므로 어느 플래그의 것인지 알 수
+없어 묶음에 못 쓴다. `(flagId, participantId)` 쌍을 프로젝션으로 받아 어댑터에서 그룹핑한다.
+`V3__add_flag_indexes.sql`의 `(flag_id, participant_id)`가 커버한다.
+
+어댑터에서 `ids.isEmpty()`면 쿼리를 보내지 않는다. 빈 `IN ()`은 DB에 따라 문법 오류다.
+
+### 4-2. 스윕
 
 ```java
-@Transactional
-public void expireEndedFlags() {
-    LocalDateTime now = LocalDateTime.now();
-    LocalDateTime threshold = now.minusHours(Flag.EXPIRATION_THRESHOLD_HOURS);
+List<FlagExpiryTarget> targets = flagRepository.findExpiryTargets(threshold, BATCH_SIZE);
+List<Long> targetIds = targets.stream().map(FlagExpiryTarget::getId).toList();
+Map<Long, List<Long>> participantsByFlagId = flagRepository.findAllParticipantIdsByFlagIds(targetIds);
+int expiredFlags = flagRepository.expireByIds(targetIds, now);
+targets.forEach(target -> publishConclusion(target, participantsByFlagId));
+```
 
-    // 초대 정리가 먼저다. 소프트 삭제를 먼저 하면 Flag의 @SQLRestriction 때문에
-    // 방금 삭제된 플래그가 초대 삭제 쿼리의 서브쿼리에서 빠진다.
-    int purgedInvitations = maintenancePort.purgeInvitationsOfEndedFlags(threshold);
+**대상이 몇 건이든 조회는 2회다.** 초대 정리가 소프트 삭제보다 먼저인 순서는 유지한다.
+`BATCH_SIZE = 5000`을 두고, 참여자가 없는 플래그는 소프트 삭제만 하고 발행하지 않는다.
 
-    List<FlagExpiryTarget> targets =
-            flagRepository.findExpiryTargets(threshold, PageRequest.of(0, BATCH_SIZE));
-    int expiredFlags = 0;
+### 4-3. 면제 획득
 
-    if (!targets.isEmpty()) {
-        expiredFlags = flagRepository.expireByIds(
-                targets.stream().map(FlagExpiryTarget::getId).toList(), now);
-        targets.forEach(t -> eventPublisher.publishEvent(
-                new FlagConcludedEvent(t.getId(), t.getHostId(), t.getParentId())));
+```java
+// Flag — 자기 상태 사실만 발행한다
+void updateAutoExpiryExempt(boolean value) {
+    if (value && !this.autoExpiryExempt) {
+        registerEvent(new FlagExpiryExemptedEvent(this.id, this.hostId, this.parentId));
     }
-
-    if (expiredFlags > 0 || purgedInvitations > 0) { ... }   // 기존 로그 유지
+    this.autoExpiryExempt = value;
 }
 ```
 
-**초대 정리를 먼저 하는 순서는 유지한다.** 기존 주석도 그대로 옮긴다.
+`FlagExpiryExemptionEventListener`가 참여자를 조회해 `FlagConcludedEvent`로 번역한다.
 
-`BATCH_SIZE = 5000`을 새로 둔다. 지금 UPDATE에는 상한이 없어 밀린 물량이 많으면
-이벤트가 한 번에 쏟아진다. `FlagPurgeService`와 같은 값으로 맞추고, 남은 것은
-6시간 뒤 다음 회차가 가져간다.
+`FlagExpiryExemptionPolicy`는 `Updater`로 개명하고 `Flag`를 반환한다. 호출부 셋
+(`FlagMemorialEventListener` 생성·삭제, `FlagEncoreEventListener`, `FlagDeletionEventListener`)이
+`flagRepository.save(...)`로 저장한다.
 
-### 4-2. 보존 활성화
+**호출부 셋이 `BEFORE_COMMIT` 리스너다.** 그 단계에서 `save()`가 도메인 이벤트를 실제로
+발행하는지는 단위 테스트로 확인되지 않으므로 `FlagConclusionEventIntegrationTest`로 본다.
 
-**`registerEvent`를 쓰지 않는다.** `FlagExpiryExemptionPolicy.refresh()`는
-`findById` 후 더티 체킹으로만 값을 바꾸고 `save()`를 부르지 않으므로 커밋 2와 같은
-이유로 이벤트가 버려진다. `ApplicationEventPublisher`로 직접 발행한다.
+### 4-4. 테스트
 
-```java
-public void refresh(Long flagId) {
-    Flag flag = flagRepository.findById(flagId)
-            .orElseThrow(() -> new FlagNotFoundException(flagId));
+- `FlagJpaRepositoryTest` — 새 프로젝션 쿼리를 실제 DB에서 검증(종료·면제·삭제 필터,
+  `hostId`/`parentId` 채움, 상한, `expireByIds`). 기존 만료 쿼리에는 DB 레벨 테스트가 없었다
+- `FlagParticipantJpaRepositoryTest` — `flag_id`별 그룹핑, 참여자 없는 플래그는 키 자체가 없음
+- `FlagMemorialFactoryTest`(신규) / `FlagEncoreFactoryTest` — `isEnded()` 가드 고정
+- **통합 테스트는 `@SpringBootTest`가 같은 Testcontainers MySQL에 커밋한다.** JPA 테스트가
+  `containsExactly`로 단정하면 남의 행에 깨지므로 `contains` + `doesNotContain`으로 쓴다
 
-    boolean wasExempt = flag.isAutoExpiryExempt();
-    boolean exempt = memorialRepository.existsByFlagId(flagId)
-                  || flagRepository.existsByParentId(flagId);
-    flag.updateAutoExpiryExempt(exempt);
+## 커밋 5 — 주석
 
-    if (exempt && !wasExempt) {
-        eventPublisher.publishEvent(
-                new FlagConcludedEvent(flag.getId(), flag.getHostId(), flag.getParentId()));
-    }
-}
-```
+코드만 봐서는 알 수 없고 모르면 잘못 고치게 되는 것만 남긴다. 되돌리기 쉬운 자리(조회를
+없애고 벌크 UPDATE로 합치기, 조건을 복사해 두 번 쓰기), 판단이 일어나는 자리
+(`InteractionType` 선택, 면제→종료 번역), 감수한 지점(면제 재점화 시 재발행).
 
-전이 검출을 정책 안에 두는 이유는 호출부가 넷인데 전이를 아는 것은 정책뿐이기
-때문이다. 호출부에서 판단하게 하면 같은 3줄이 여러 군데 복제된다.
+## 커밋 6 — `save()` 명시
 
-`refresh()` 호출부는 이렇다.
+flag 도메인에서 변경만 하고 저장을 안 부르던 여섯 곳을 채운다.
 
-| 호출부 | 트랜잭션 단계 | `false → true` 가능성 |
-|---|---|---|
-| `FlagMemorialEventListener.handleMemorialCreated` | `BEFORE_COMMIT` | **있다 (첫 후기)** |
-| `FlagEncoreEventListener.handleEncoreCreated` | `BEFORE_COMMIT` | **있다 (첫 앵콜)** |
-| `FlagMemorialEventListener.handleMemorialDeleted` | `BEFORE_COMMIT` | 없다 (해제 방향) |
-| `FlagDeletionEventListener:42` | `AFTER_COMMIT` + `REQUIRES_NEW` | 없다 (자식 삭제 후 부모 재계산, 해제 방향) |
+`FlagModificationService`의 `modifyFlagDetails`·`modifyFlagCapacity`·`closeRecruitment`,
+`FlagCommentCommandService.updateComment`, `FlagMemorialCommandService.updateMemorial`,
+`FlagInvitationCommandService.updateInvitePermission`.
 
-**확인이 필요한 전제는 위쪽 둘이다.** `BEFORE_COMMIT` 단계에서 발행한 이벤트도
-트랜잭션 동기화에 등록되어 `AFTER_COMMIT` 리스너가 받는 것이 맞지만, 단위 테스트로는
-검증되지 않는다. **통합 테스트로 실제 확인한다.**
-
-세 경로 전체로 보면 발행 지점의 단계가 서로 다르다. ①은 `FlagDeletionEventListener`의
-`REQUIRES_NEW` 트랜잭션 안(지금 `BatchMutualInteractionEvent`가 발행되는 바로 그 자리),
-②는 `FlagExpiryService`의 일반 `@Transactional` 안, ③만 `BEFORE_COMMIT`이다.
-**①과 ②는 이미 동작이 확인된 형태라 새로 확인할 것이 없다.**
-
-**테스트:** `FlagExpiryServiceTest`에 소프트 삭제 건수만큼 발행되는지, 보존 플래그가
-대상에서 빠지는지, 배치 상한이 걸리는지, 초대 정리가 먼저인지를 넣는다.
-통합 테스트에서는 첫 후기 작성에 발행되고 두 번째 후기 작성에는 발행되지 않는 것을 본다.
+마지막 건은 `FlagInvitationManager.updateInvitePermission`이 `FlagParticipant`를 반환하도록
+바꾼다. 여섯 곳 모두 도메인 이벤트를 등록하지 않아 동작은 바뀌지 않는다.
 
 ---
 
 ## 확인해둔 사실
 
-구현 중 전제가 흔들리면 멈추고 보고할 지점이다.
-
-- `BatchMutualInteractionEvent` 발행 지점은 현재 `FlagDeletionEventListener:66`
-  **한 곳뿐**이다. 커밋 3 이후 `FlagConclusionEventListener`가 유일한 발행 지점이 된다
-- 보존 원천 둘이 모두 종료 이후에만 발생한다. `FlagMemorialFactory:16`의
-  `if(!flag.isEnded()) throw`, `Flag.createEncore:84`의 `if (!this.isEnded()) throw`.
-  **이 가드가 없으면 4-2가 열리지 않은 모임에 친밀도를 준다**
-- `flag_participants`에는 `@SQLRestriction`이 없다. 소프트 삭제 후에도 조회된다
-- social 쪽은 한 줄도 바뀌지 않는다. `FriendInteractionEventListener`가 받는 이벤트
-  타입과 페이로드가 그대로다
+- `BatchMutualInteractionEvent` 발행 지점은 작업 후 `FlagConclusionEventListener` 하나다
+- 보존 원천 둘이 모두 종료 이후에만 발생한다(`FlagMemorialFactory`, `Flag.createEncore`).
+  커밋 4에서 이 가드를 테스트로 고정했다
+- `flag_participants`에는 `@SQLRestriction`이 없어 소프트 삭제 후에도 조회된다
+- social은 한 줄도 바뀌지 않는다. 받는 이벤트 타입과 페이로드가 그대로다
 - 스키마 변경 없음. 마이그레이션 파일을 추가하지 않는다
