@@ -23,7 +23,7 @@ public class FlagInvitationManager {
     private final FlagInvitationRepository invitationRepository;
     private final FlagParticipationManager flagParticipationManager;
 
-    public void updateInvitePermission(Long flagId, Long requesterId, Long participantUserId, boolean canInvite) {
+    public FlagParticipant updateInvitePermission(Long flagId, Long requesterId, Long participantUserId, boolean canInvite) {
         Flag flag = flagRepository.findById(flagId)
                 .orElseThrow(() -> new FlagNotFoundException(flagId));
         FlagParticipant participant = flagRepository
@@ -35,6 +35,8 @@ public class FlagInvitationManager {
         } else {
             flag.revokeInvitePermission(requesterId, participant);
         }
+
+        return participant;
     }
 
     public FlagInvitation invite(Long flagId, Long inviterId, Long inviteeId) {

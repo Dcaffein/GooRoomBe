@@ -43,6 +43,7 @@ public class FlagMemorialCommandService implements FlagMemorialCommandUseCase {
         validateBelongsToFlag(memorial, flagId);
 
         memorial.updateContent(requesterId, content);
+        memorialRepository.save(memorial);
     }
 
     @Override

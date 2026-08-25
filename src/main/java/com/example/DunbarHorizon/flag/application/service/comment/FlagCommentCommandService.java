@@ -50,6 +50,7 @@ public class FlagCommentCommandService implements FlagCommentCommandUseCase {
         validateBelongsToFlag(comment, flagId);
 
         comment.update(userId, content, isPrivate);
+        commentRepository.save(comment);
     }
 
     @Override

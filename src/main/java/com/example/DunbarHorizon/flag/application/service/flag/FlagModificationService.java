@@ -22,6 +22,7 @@ public class FlagModificationService implements FlagModificationUseCase {
     public void modifyFlagDetails(FlagDetailsUpdateCommand command) {
         Flag flag = getFlagOrThrow(command.flagId());
         flag.updateBasicInfo(command.hostId(), command.title(), command.description());
+        flagRepository.save(flag);
     }
 
     @Override
@@ -32,6 +33,7 @@ public class FlagModificationService implements FlagModificationUseCase {
                 .orElseThrow(() -> new FlagNotFoundException(command.flagId()));
         int currentCount = flagRepository.countParticipants(command.flagId());
         flag.updateCapacity(command.hostId(), command.capacity(), currentCount);
+        flagRepository.save(flag);
     }
 
     @Override
@@ -47,6 +49,7 @@ public class FlagModificationService implements FlagModificationUseCase {
         Flag flag = flagRepository.findByIdForUpdate(flagId)
                 .orElseThrow(() -> new FlagNotFoundException(flagId));
         flag.closeRecruitment(hostId);
+        flagRepository.save(flag);
     }
 
     @Override

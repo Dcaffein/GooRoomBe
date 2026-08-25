@@ -26,7 +26,9 @@ public class FlagInvitationCommandService implements FlagInvitationUseCase {
 
     @Override
     public void updateInvitePermission(Long flagId, Long requesterId, Long participantUserId, boolean canInvite) {
-        invitationManager.updateInvitePermission(flagId, requesterId, participantUserId, canInvite);
+        FlagParticipant participant =
+                invitationManager.updateInvitePermission(flagId, requesterId, participantUserId, canInvite);
+        flagRepository.saveParticipant(participant);
     }
 
     @Override
