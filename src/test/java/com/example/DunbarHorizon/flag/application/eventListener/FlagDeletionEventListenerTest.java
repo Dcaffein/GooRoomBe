@@ -6,9 +6,14 @@ import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
 import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagDeletedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
+import com.example.DunbarHorizon.global.event.notification.NotificationEvent;
+import com.example.DunbarHorizon.global.event.notification.NotificationType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,12 +42,30 @@ class FlagDeletionEventListenerTest {
     private static final Long HOST_ID = 10L;
     private static final LocalDateTime NOW = LocalDateTime.now();
 
+    private static final String FLAG_TITLE = "테스트 플래그";
+    private static final List<Long> PARTICIPANT_IDS = List.of(21L, 22L, 23L);
+
     private FlagDeletedEvent recruitingEvent() {
-        return new FlagDeletedEvent(FLAG_ID, HOST_ID, null, "테스트 플래그", FlagStatus.RECRUITING);
+        return eventOf(FlagStatus.RECRUITING);
     }
 
     private FlagDeletedEvent endedEventWithParent(Long parentId) {
-        return new FlagDeletedEvent(FLAG_ID, HOST_ID, parentId, "테스트 플래그", FlagStatus.ENDED);
+        return new FlagDeletedEvent(FLAG_ID, HOST_ID, parentId, FLAG_TITLE, FlagStatus.ENDED);
+    }
+
+    private FlagDeletedEvent eventOf(FlagStatus status) {
+        return new FlagDeletedEvent(FLAG_ID, HOST_ID, null, FLAG_TITLE, status);
+    }
+
+    private void givenParticipants(List<Long> participantIds) {
+        given(flagRepository.findByParentId(FLAG_ID)).willReturn(Optional.empty());
+        given(flagRepository.findAllParticipantIds(FLAG_ID)).willReturn(participantIds);
+    }
+
+    private NotificationEvent capturedNotification() {
+        ArgumentCaptor<NotificationEvent> captor = ArgumentCaptor.forClass(NotificationEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        return captor.getValue();
     }
 
     @Test
@@ -75,6 +98,50 @@ class FlagDeletionEventListenerTest {
 
         // then
         assertThat(encoreFlag.getParentId()).isNull();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = FlagStatus.class, names = {"RECRUITING", "WAITING", "IN_ACTIVITY"})
+    @DisplayName("종료되지 않은 Flag를 삭제하면 참여자 전원에게 취소 알림이 간다")
+    void handleFlagDeletion_notifiesParticipants_whenNotEnded(FlagStatus status) {
+        // given
+        givenParticipants(PARTICIPANT_IDS);
+
+        // when
+        listener.handleFlagDeletion(eventOf(status));
+
+        // then
+        NotificationEvent notification = capturedNotification();
+        assertThat(notification.receiverIds()).containsExactlyElementsOf(PARTICIPANT_IDS);
+        assertThat(notification.type()).isEqualTo(NotificationType.FLAG_CANCELED);
+        assertThat(notification.content()).contains(FLAG_TITLE);
+    }
+
+    @Test
+    @DisplayName("종료된 Flag를 삭제하면 취소 알림을 보내지 않는다")
+    void handleFlagDeletion_doesNotNotify_whenEnded() {
+        // given
+        givenParticipants(PARTICIPANT_IDS);
+
+        // when
+        listener.handleFlagDeletion(eventOf(FlagStatus.ENDED));
+
+        // then
+        verify(eventPublisher, never()).publishEvent(any(NotificationEvent.class));
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlagStatus.class)
+    @DisplayName("참여자가 없으면 어떤 상태에서도 취소 알림을 보내지 않는다")
+    void handleFlagDeletion_doesNotNotify_whenNoParticipants(FlagStatus status) {
+        // given
+        givenParticipants(List.of());
+
+        // when
+        listener.handleFlagDeletion(eventOf(status));
+
+        // then
+        verify(eventPublisher, never()).publishEvent(any(NotificationEvent.class));
     }
 
     @Test

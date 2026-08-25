@@ -48,7 +48,7 @@ public class FlagDeletionEventListener {
     private void notifyParticipants(FlagDeletedEvent event, Long hostId) {
         List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
 
-        if (!participantIds.isEmpty() && event.statusAtDeletion() != FlagStatus.RECRUITING) {
+        if (!participantIds.isEmpty() && event.statusAtDeletion() != FlagStatus.ENDED) {
             publishNotification(participantIds, event.flagTitle());
         }
 
