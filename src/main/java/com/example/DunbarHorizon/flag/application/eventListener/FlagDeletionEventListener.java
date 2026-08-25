@@ -3,10 +3,9 @@ package com.example.DunbarHorizon.flag.application.eventListener;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagExpiryExemptionPolicy;
 import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
+import com.example.DunbarHorizon.flag.domain.flag.event.FlagConcludedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagDeletedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
-import com.example.DunbarHorizon.global.event.interaction.BatchMutualInteractionEvent;
-import com.example.DunbarHorizon.global.event.interaction.InteractionType;
 import com.example.DunbarHorizon.global.event.notification.NotificationEvent;
 import com.example.DunbarHorizon.global.event.notification.NotificationType;
 import lombok.RequiredArgsConstructor;
@@ -36,37 +35,23 @@ public class FlagDeletionEventListener {
         Optional<Flag> encoreResult = flagRepository.findByParentId(event.flagId());
         encoreResult.ifPresent(Flag::severParentLink);
 
-        notifyParticipants(event, event.hostId());
+        List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
+
+        if (!participantIds.isEmpty()) {
+            if (event.statusAtDeletion() == FlagStatus.ENDED) {
+                eventPublisher.publishEvent(new FlagConcludedEvent(
+                        event.flagId(), event.hostId(), event.parentId(), participantIds));
+            } else {
+                notifyFlagCancel(participantIds, event.flagTitle());
+            }
+        }
 
         if (event.parentId() != null) {
             flagExpiryExemptionPolicy.refresh(event.parentId());
         }
     }
 
-    // 참여자 삭제는 하드 퍼지 배치가 맡는다. 이 메서드는 발행만 하므로 재실행 시
-    // 알림이 중복될 수 있다 — 재시도나 아웃박스를 도입하면 멱등 키가 필요하다.
-    private void notifyParticipants(FlagDeletedEvent event, Long hostId) {
-        List<Long> participantIds = flagRepository.findAllParticipantIds(event.flagId());
-
-        if (!participantIds.isEmpty() && event.statusAtDeletion() != FlagStatus.ENDED) {
-            publishNotification(participantIds, event.flagTitle());
-        }
-
-        if (!participantIds.isEmpty() && isMeetingHeld(event.statusAtDeletion())) {
-            publishInteractionEvents(participantIds, hostId, event.parentId() != null);
-        }
-    }
-
-    private boolean isMeetingHeld(FlagStatus status) {
-        return status == FlagStatus.ENDED || status == FlagStatus.IN_ACTIVITY;
-    }
-
-    private void publishInteractionEvents(List<Long> participantIds, Long hostId, boolean isEncore) {
-        InteractionType type = isEncore ? InteractionType.FLAG_ENDED_ENCORE : InteractionType.FLAG_ENDED;
-        eventPublisher.publishEvent(new BatchMutualInteractionEvent(participantIds, hostId, type));
-    }
-
-    private void publishNotification(List<Long> receiverIds, String title) {
+    private void notifyFlagCancel(List<Long> receiverIds, String title) {
         NotificationEvent notificationEvent = NotificationEvent.builder()
                 .receiverIds(receiverIds)
                 .title("모임 취소 안내")

@@ -4,6 +4,7 @@ import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagExpiryExemptionPolicy;
 import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
 import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
+import com.example.DunbarHorizon.flag.domain.flag.event.FlagConcludedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagDeletedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import com.example.DunbarHorizon.global.event.notification.NotificationEvent;
@@ -62,6 +63,12 @@ class FlagDeletionEventListenerTest {
         given(flagRepository.findAllParticipantIds(FLAG_ID)).willReturn(participantIds);
     }
 
+    private FlagConcludedEvent capturedConclusion() {
+        ArgumentCaptor<FlagConcludedEvent> captor = ArgumentCaptor.forClass(FlagConcludedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        return captor.getValue();
+    }
+
     private NotificationEvent capturedNotification() {
         ArgumentCaptor<NotificationEvent> captor = ArgumentCaptor.forClass(NotificationEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
@@ -117,9 +124,23 @@ class FlagDeletionEventListenerTest {
         assertThat(notification.content()).contains(FLAG_TITLE);
     }
 
+    @ParameterizedTest
+    @EnumSource(value = FlagStatus.class, names = {"RECRUITING", "WAITING", "IN_ACTIVITY"})
+    @DisplayName("종료되지 않은 Flag를 삭제하면 모임이 열린 것으로 치지 않는다")
+    void handleFlagDeletion_doesNotConclude_whenNotEnded(FlagStatus status) {
+        // given
+        givenParticipants(PARTICIPANT_IDS);
+
+        // when
+        listener.handleFlagDeletion(eventOf(status));
+
+        // then
+        verify(eventPublisher, never()).publishEvent(any(FlagConcludedEvent.class));
+    }
+
     @Test
-    @DisplayName("종료된 Flag를 삭제하면 취소 알림을 보내지 않는다")
-    void handleFlagDeletion_doesNotNotify_whenEnded() {
+    @DisplayName("종료된 Flag를 삭제하면 취소 알림 대신 종료 사실을 발행한다")
+    void handleFlagDeletion_concludes_whenEnded() {
         // given
         givenParticipants(PARTICIPANT_IDS);
 
@@ -128,6 +149,42 @@ class FlagDeletionEventListenerTest {
 
         // then
         verify(eventPublisher, never()).publishEvent(any(NotificationEvent.class));
+
+        FlagConcludedEvent concluded = capturedConclusion();
+        assertThat(concluded.flagId()).isEqualTo(FLAG_ID);
+        assertThat(concluded.hostId()).isEqualTo(HOST_ID);
+        assertThat(concluded.participantIds()).containsExactlyElementsOf(PARTICIPANT_IDS);
+        assertThat(concluded.isEncore()).isFalse();
+    }
+
+    @Test
+    @DisplayName("앵콜 Flag가 종료 후 삭제되면 parentId를 실어 발행한다")
+    void handleFlagDeletion_concludes_carriesParentId() {
+        // given
+        Long parentId = 99L;
+        givenParticipants(PARTICIPANT_IDS);
+
+        // when
+        listener.handleFlagDeletion(endedEventWithParent(parentId));
+
+        // then
+        FlagConcludedEvent concluded = capturedConclusion();
+        assertThat(concluded.parentId()).isEqualTo(parentId);
+        assertThat(concluded.isEncore()).isTrue();
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlagStatus.class)
+    @DisplayName("참여자가 없으면 어떤 상태에서도 종료 사실을 발행하지 않는다")
+    void handleFlagDeletion_doesNotConclude_whenNoParticipants(FlagStatus status) {
+        // given
+        givenParticipants(List.of());
+
+        // when
+        listener.handleFlagDeletion(eventOf(status));
+
+        // then
+        verify(eventPublisher, never()).publishEvent(any(FlagConcludedEvent.class));
     }
 
     @ParameterizedTest
@@ -145,7 +202,7 @@ class FlagDeletionEventListenerTest {
     }
 
     @Test
-    @DisplayName("parentId가 있으면 부모 Flag의 보존 상태 재계산을 시도한다")
+    @DisplayName("parentId가 있으면 부모 Flag의 만료 면제 재계산을 시도한다")
     void handleFlagDeletion_refreshesParentExemption() {
         // given
         Long parentId = 99L;
