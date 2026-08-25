@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.flag.domain.flag;
 
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagDeletedEvent;
+import com.example.DunbarHorizon.flag.domain.flag.event.FlagExpiryExemptedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagEncoreEvent;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagMeetingChangedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagAuthorizationException;
@@ -182,6 +183,9 @@ public class Flag extends BaseTimeAggregateRoot implements SoftDeletable {
     }
 
     void updateAutoExpiryExempt(boolean value) {
+        if (value && !this.autoExpiryExempt) {
+            registerEvent(new FlagExpiryExemptedEvent(this.id, this.hostId, this.parentId));
+        }
         this.autoExpiryExempt = value;
     }
 

@@ -4,6 +4,7 @@ import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagJpaReposit
 import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagParticipantJpaRepository;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
+import com.example.DunbarHorizon.flag.domain.flag.repository.FlagExpiryTarget;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -52,8 +53,14 @@ public class FlagRepositoryAdapter implements FlagRepository {
     }
 
     @Override
-    public int expireAllExceedingThreshold(LocalDateTime threshold, LocalDateTime now) {
-        return flagJpaRepository.expireAllExceedingThreshold(threshold, now);
+    public List<FlagExpiryTarget> findExpiryTargets(LocalDateTime threshold, int limit) {
+        return flagJpaRepository.findExpiryTargets(threshold, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public int expireByIds(Collection<Long> ids, LocalDateTime now) {
+        if (ids.isEmpty()) return 0;
+        return flagJpaRepository.expireByIds(ids, now);
     }
 
     @Override
@@ -124,6 +131,18 @@ public class FlagRepositoryAdapter implements FlagRepository {
     @Override
     public List<Long> findAllParticipantIds(Long flagId) {
         return participantJpaRepository.findAllParticipantIdsByFlagId(flagId);
+    }
+
+    @Override
+    public Map<Long, List<Long>> findAllParticipantIdsByFlagIds(Collection<Long> flagIds) {
+        if (flagIds == null || flagIds.isEmpty()) return Map.of();
+        return participantJpaRepository.findAllParticipantIdsByFlagIdIn(flagIds).stream()
+                .collect(Collectors.groupingBy(
+                        FlagParticipantJpaRepository.FlagParticipantIdProjection::getFlagId,
+                        Collectors.mapping(
+                                FlagParticipantJpaRepository.FlagParticipantIdProjection::getParticipantId,
+                                Collectors.toList())
+                ));
     }
 
     @Override

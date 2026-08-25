@@ -17,7 +17,8 @@ public interface FlagRepository {
     Optional<Long> findHostIdById(Long id);
     Optional<Flag> findByIdForUpdate(Long id);
     Optional<Flag> findByParentId(Long parentId);
-    int expireAllExceedingThreshold(LocalDateTime threshold, LocalDateTime now);
+    List<FlagExpiryTarget> findExpiryTargets(LocalDateTime threshold, int limit);
+    int expireByIds(Collection<Long> ids, LocalDateTime now);
     boolean existsByParentId(Long parentId);
     List<Flag> findAllByIdIn(Collection<Long> ids);
     List<Flag> findAllByHostId(Long hostId);
@@ -32,6 +33,7 @@ public interface FlagRepository {
     Map<Long, Integer> countParticipantsByFlagIds(Collection<Long> flagIds);
     boolean isParticipating(Long flagId, Long participantId);
     List<Long> findAllParticipantIds(Long flagId);
+    Map<Long, List<Long>> findAllParticipantIdsByFlagIds(Collection<Long> flagIds);
     List<Long> findFlagIdsByParticipantId(Long participantId);
     List<FlagParticipant> findAllParticipants(Long flagId);
 }

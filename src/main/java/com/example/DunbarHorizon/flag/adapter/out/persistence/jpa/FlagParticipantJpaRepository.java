@@ -34,6 +34,15 @@ public interface FlagParticipantJpaRepository extends JpaRepository<FlagParticip
     @Query("SELECT fp.participantId FROM FlagParticipant fp WHERE fp.flagId = :flagId")
     List<Long> findAllParticipantIdsByFlagId(@Param("flagId") Long flagId);
 
+    interface FlagParticipantIdProjection {
+        Long getFlagId();
+        Long getParticipantId();
+    }
+
+    @Query("SELECT fp.flagId AS flagId, fp.participantId AS participantId FROM FlagParticipant fp " +
+           "WHERE fp.flagId IN :flagIds")
+    List<FlagParticipantIdProjection> findAllParticipantIdsByFlagIdIn(@Param("flagIds") Collection<Long> flagIds);
+
     @Query("SELECT fp.flagId FROM FlagParticipant fp WHERE fp.participantId = :participantId")
     List<Long> findFlagIdsByParticipantId(@Param("participantId") Long participantId);
 

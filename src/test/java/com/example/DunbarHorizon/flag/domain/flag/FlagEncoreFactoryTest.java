@@ -45,6 +45,18 @@ class FlagEncoreFactoryTest {
     }
 
     @Test
+    @DisplayName("종료되지 않은 플래그에는 encore를 생성할 수 없다")
+    void encore_ParentNotEnded_ThrowsException() {
+        FlagSchedule schedule = FlagSchedule.of(NOW.plusHours(1), NOW.plusHours(2), NOW.plusHours(3));
+        Flag recruitingParent = Flag.create(HOST_ID, "원본 플래그", "설명", 10, schedule);
+        ReflectionTestUtils.setField(recruitingParent, "id", 1L);
+
+        assertThatThrownBy(() ->
+                flagEncoreFactory.encore(recruitingParent, HOST_ID, NOW.plusHours(4), NOW.plusHours(5), NOW.plusHours(6)))
+                .isInstanceOf(FlagInvalidStatusException.class);
+    }
+
+    @Test
     @DisplayName("호스트가 아닌 사용자가 encore를 생성하면 FlagAuthorizationException이 발생한다")
     void encore_ByNonHost_ThrowsException() {
         Flag parent = endedParentFlag();

@@ -14,14 +14,14 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * FlagExpiryExemptionPolicy가 save() 없이 더티 체킹만으로 반영되는지 확인한다.
+ * FlagExpiryExemptionUpdater가 save() 없이 더티 체킹만으로 반영되는지 확인한다.
  * mock 테스트로는 잡히지 않는 부분이라 실제 DB로 검증한다.
  */
 @JpaRepositoryTest
-@Import({FlagExpiryExemptionPolicy.class, FlagRepositoryAdapter.class, FlagMemorialRepositoryAdapter.class})
+@Import({FlagExpiryExemptionUpdater.class, FlagRepositoryAdapter.class, FlagMemorialRepositoryAdapter.class})
 class FlagExpiryExemptionPersistenceTest {
 
-    @Autowired private FlagExpiryExemptionPolicy policy;
+    @Autowired private FlagExpiryExemptionUpdater policy;
     @Autowired private TestEntityManager em;
 
     private static final Long HOST_ID = 1L;

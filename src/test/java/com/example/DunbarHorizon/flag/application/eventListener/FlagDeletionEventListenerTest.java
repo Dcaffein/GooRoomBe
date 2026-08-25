@@ -1,7 +1,7 @@
 package com.example.DunbarHorizon.flag.application.eventListener;
 
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
-import com.example.DunbarHorizon.flag.domain.flag.FlagExpiryExemptionPolicy;
+import com.example.DunbarHorizon.flag.domain.flag.FlagExpiryExemptionUpdater;
 import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
 import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
 import com.example.DunbarHorizon.flag.domain.flag.event.FlagConcludedEvent;
@@ -36,7 +36,7 @@ class FlagDeletionEventListenerTest {
     private FlagDeletionEventListener listener;
 
     @Mock private FlagRepository flagRepository;
-    @Mock private FlagExpiryExemptionPolicy flagExpiryExemptionPolicy;
+    @Mock private FlagExpiryExemptionUpdater flagExpiryExemptionUpdater;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private static final Long FLAG_ID = 1L;
@@ -215,6 +215,6 @@ class FlagDeletionEventListenerTest {
         listener.handleFlagDeletion(event);
 
         // then
-        verify(flagExpiryExemptionPolicy).refresh(parentId);
+        verify(flagExpiryExemptionUpdater).refresh(parentId);
     }
 }

@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.flag.adapter.out.persistence.jpa;
 
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
+import com.example.DunbarHorizon.flag.domain.flag.repository.FlagExpiryTarget;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -31,13 +32,15 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
     @Query("SELECT f FROM Flag f WHERE f.id = :id")
     Optional<Flag> findByIdForUpdate(@Param("id") Long id);
 
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE Flag f SET f.deletedAt = :now " +
+    @Query("SELECT f.id AS id, f.hostId AS hostId, f.parentId AS parentId FROM Flag f " +
             "WHERE f.schedule.endDateTime < :threshold " +
             "AND f.autoExpiryExempt = false " +
-            "AND f.deletedAt IS NULL")
-    int expireAllExceedingThreshold(@Param("threshold") LocalDateTime threshold,
-                                    @Param("now") LocalDateTime now);
+            "ORDER BY f.schedule.endDateTime ASC")
+    List<FlagExpiryTarget> findExpiryTargets(@Param("threshold") LocalDateTime threshold, Pageable pageable);
+
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Flag f SET f.deletedAt = :now WHERE f.id IN :ids AND f.deletedAt IS NULL")
+    int expireByIds(@Param("ids") Collection<Long> ids, @Param("now") LocalDateTime now);
 
     @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.deadline > :asOf")
     List<Flag> findByHostIdsAndDeadlineAfter(@Param("hostIds") Collection<Long> hostIds, @Param("asOf") LocalDateTime asOf);

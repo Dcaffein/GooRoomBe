@@ -4,11 +4,14 @@ import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagJpaReposit
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
 import com.example.DunbarHorizon.flag.domain.flag.FlagStatus;
+import com.example.DunbarHorizon.flag.domain.flag.repository.FlagExpiryTarget;
 import com.example.DunbarHorizon.support.JpaRepositoryTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -120,5 +123,96 @@ class FlagJpaRepositoryTest {
         // then
         assertThat(results).extracting(Flag::getId)
                 .containsExactlyInAnyOrder(hostFlag.getId(), otherHostFlag.getId());
+    }
+
+    private Flag persistEndedFlag(Long hostId, LocalDateTime end) {
+        return persistFlag(hostId, end.minusHours(3), end.minusHours(2), end);
+    }
+
+    @Test
+    @DisplayName("만료 대상은 종료 시각이 지났고 만료 면제가 아닌 플래그뿐이다")
+    void findExpiryTargets_ReturnsOnlyEndedAndNotExempt() {
+        // given
+        Flag target = persistEndedFlag(HOST_ID, asOf.minusHours(1));
+        Flag notEndedYet = persistEndedFlag(HOST_ID, asOf.plusHours(1));
+
+        Flag exempt = persistEndedFlag(HOST_ID, asOf.minusHours(2));
+        ReflectionTestUtils.setField(exempt, "autoExpiryExempt", true);
+
+        Flag alreadyDeleted = persistEndedFlag(HOST_ID, asOf.minusHours(3));
+        alreadyDeleted.softDelete();
+
+        em.flush();
+        em.clear();
+
+        // when
+        List<FlagExpiryTarget> results = repository.findExpiryTargets(asOf, PageRequest.of(0, 100));
+
+        // then — 통합 테스트가 같은 컨테이너에 커밋해둔 행이 섞일 수 있어 포함 여부로만 본다
+        assertThat(results).extracting(FlagExpiryTarget::getId).contains(target.getId());
+        assertThat(results).extracting(FlagExpiryTarget::getId)
+                .doesNotContain(notEndedYet.getId(), exempt.getId(), alreadyDeleted.getId());
+    }
+
+    @Test
+    @DisplayName("만료 대상 조회가 hostId와 parentId를 함께 돌려준다")
+    void findExpiryTargets_CarriesHostIdAndParentId() {
+        // given
+        Flag parent = persistEndedFlag(HOST_ID, asOf.minusHours(5));
+        ReflectionTestUtils.setField(parent, "autoExpiryExempt", true);
+        em.flush();
+
+        Flag encore = persistEndedFlag(OTHER_HOST_ID, asOf.minusHours(1));
+        ReflectionTestUtils.setField(encore, "parentId", parent.getId());
+        em.flush();
+        em.clear();
+
+        // when
+        List<FlagExpiryTarget> results = repository.findExpiryTargets(asOf, PageRequest.of(0, 100));
+
+        // then
+        FlagExpiryTarget found = results.stream()
+                .filter(t -> t.getId().equals(encore.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(found.getHostId()).isEqualTo(OTHER_HOST_ID);
+        assertThat(found.getParentId()).isEqualTo(parent.getId());
+        assertThat(results).extracting(FlagExpiryTarget::getId).doesNotContain(parent.getId());
+    }
+
+    @Test
+    @DisplayName("만료 대상 조회에 상한이 걸린다")
+    void findExpiryTargets_HonorsLimit() {
+        // given
+        persistEndedFlag(HOST_ID, asOf.minusHours(1));
+        persistEndedFlag(HOST_ID, asOf.minusHours(2));
+        persistEndedFlag(HOST_ID, asOf.minusHours(3));
+        em.flush();
+        em.clear();
+
+        // when
+        List<FlagExpiryTarget> results = repository.findExpiryTargets(asOf, PageRequest.of(0, 2));
+
+        // then
+        assertThat(results).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("expireByIds는 넘긴 id만 소프트 삭제한다")
+    void expireByIds_SoftDeletesGivenIdsOnly() {
+        // given
+        Flag target = persistEndedFlag(HOST_ID, asOf.minusHours(1));
+        Flag untouched = persistEndedFlag(HOST_ID, asOf.minusHours(2));
+        em.flush();
+        em.clear();
+
+        // when
+        int affected = repository.expireByIds(List.of(target.getId()), asOf);
+        em.clear();
+
+        // then
+        assertThat(affected).isEqualTo(1);
+        assertThat(repository.findById(target.getId())).isEmpty();
+        assertThat(repository.findById(untouched.getId())).isPresent();
     }
 }

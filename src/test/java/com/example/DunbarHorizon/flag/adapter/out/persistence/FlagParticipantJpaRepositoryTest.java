@@ -2,6 +2,7 @@ package com.example.DunbarHorizon.flag.adapter.out.persistence;
 
 import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagParticipantJpaRepository;
 import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagParticipantJpaRepository.FlagParticipantCountProjection;
+import com.example.DunbarHorizon.flag.adapter.out.persistence.jpa.FlagParticipantJpaRepository.FlagParticipantIdProjection;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
 import com.example.DunbarHorizon.support.JpaRepositoryTest;
 import org.junit.jupiter.api.DisplayName;
@@ -124,5 +125,29 @@ class FlagParticipantJpaRepositoryTest {
 
         // then
         assertThat(participantIds).containsExactlyInAnyOrder(MEMBER_ID, OTHER_MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("여러 플래그의 참여자를 한 번에 조회한다")
+    void findAllParticipantIdsByFlagIdIn_GroupsByFlag() {
+        // given
+        persist(FLAG_ID, MEMBER_ID);
+        persist(FLAG_ID, OTHER_MEMBER_ID);
+        persist(OTHER_FLAG_ID, MEMBER_ID);
+        em.flush();
+        em.clear();
+
+        // when
+        Map<Long, List<Long>> byFlag =
+                repository.findAllParticipantIdsByFlagIdIn(List.of(FLAG_ID, OTHER_FLAG_ID, EMPTY_FLAG_ID)).stream()
+                        .collect(Collectors.groupingBy(
+                                FlagParticipantIdProjection::getFlagId,
+                                Collectors.mapping(FlagParticipantIdProjection::getParticipantId, Collectors.toList())));
+
+        // then
+        assertThat(byFlag.get(FLAG_ID)).containsExactlyInAnyOrder(MEMBER_ID, OTHER_MEMBER_ID);
+        assertThat(byFlag.get(OTHER_FLAG_ID)).containsExactly(MEMBER_ID);
+        // 참여자가 없는 플래그는 키 자체가 없다
+        assertThat(byFlag).doesNotContainKey(EMPTY_FLAG_ID);
     }
 }

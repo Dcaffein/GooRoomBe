@@ -1,5 +1,6 @@
 package com.example.DunbarHorizon.flag.domain.flag;
 
+import com.example.DunbarHorizon.flag.domain.flag.event.FlagExpiryExemptedEvent;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundException;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import com.example.DunbarHorizon.flag.domain.memorial.repository.FlagMemorialRepository;
@@ -18,10 +19,10 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
-class FlagExpiryExemptionPolicyTest {
+class FlagExpiryExemptionUpdaterTest {
 
     @InjectMocks
-    private FlagExpiryExemptionPolicy flagExpiryExemptionPolicy;
+    private FlagExpiryExemptionUpdater flagExpiryExemptionUpdater;
 
     @Mock
     private FlagRepository flagRepository;
@@ -48,7 +49,7 @@ class FlagExpiryExemptionPolicyTest {
         given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
 
         // when
-        flagExpiryExemptionPolicy.refresh(FLAG_ID);
+        flagExpiryExemptionUpdater.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isTrue();
@@ -64,7 +65,7 @@ class FlagExpiryExemptionPolicyTest {
         given(flagRepository.existsByParentId(FLAG_ID)).willReturn(true);
 
         // when
-        flagExpiryExemptionPolicy.refresh(FLAG_ID);
+        flagExpiryExemptionUpdater.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isTrue();
@@ -81,10 +82,63 @@ class FlagExpiryExemptionPolicyTest {
         given(flagRepository.existsByParentId(FLAG_ID)).willReturn(false);
 
         // when
-        flagExpiryExemptionPolicy.refresh(FLAG_ID);
+        flagExpiryExemptionUpdater.refresh(FLAG_ID);
 
         // then
         assertThat(flag.isAutoExpiryExempt()).isFalse();
+    }
+
+    @Test
+    @DisplayName("면제가 true가 되면 종료 사실을 등록한다")
+    void refresh_exemptionTurnedOn_registersEvent() {
+        // given
+        Flag flag = createFlag();
+        ReflectionTestUtils.setField(flag, "parentId", 99L);
+        given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
+        given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
+
+        // when
+        flagExpiryExemptionUpdater.refresh(FLAG_ID);
+
+        // then
+        assertThat(flag.getDomainEvents()).hasSize(1);
+        FlagExpiryExemptedEvent event = (FlagExpiryExemptedEvent) flag.getDomainEvents().get(0);
+        assertThat(event.flagId()).isEqualTo(FLAG_ID);
+        assertThat(event.hostId()).isEqualTo(flag.getHostId());
+        assertThat(event.parentId()).isEqualTo(99L);
+    }
+
+    @Test
+    @DisplayName("이미 면제 상태면 다시 등록하지 않는다")
+    void refresh_alreadyExempt_registersNothing() {
+        // given
+        Flag flag = createFlag();
+        ReflectionTestUtils.setField(flag, "autoExpiryExempt", true);
+        given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
+        given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(true);
+
+        // when
+        flagExpiryExemptionUpdater.refresh(FLAG_ID);
+
+        // then
+        assertThat(flag.getDomainEvents()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("면제가 해제될 때는 등록하지 않는다")
+    void refresh_exemptionTurnedOff_registersNothing() {
+        // given
+        Flag flag = createFlag();
+        ReflectionTestUtils.setField(flag, "autoExpiryExempt", true);
+        given(flagRepository.findById(FLAG_ID)).willReturn(Optional.of(flag));
+        given(memorialRepository.existsByFlagId(FLAG_ID)).willReturn(false);
+        given(flagRepository.existsByParentId(FLAG_ID)).willReturn(false);
+
+        // when
+        flagExpiryExemptionUpdater.refresh(FLAG_ID);
+
+        // then
+        assertThat(flag.getDomainEvents()).isEmpty();
     }
 
     @Test
@@ -94,7 +148,7 @@ class FlagExpiryExemptionPolicyTest {
         given(flagRepository.findById(FLAG_ID)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> flagExpiryExemptionPolicy.refresh(FLAG_ID))
+        assertThatThrownBy(() -> flagExpiryExemptionUpdater.refresh(FLAG_ID))
                 .isInstanceOf(FlagNotFoundException.class);
     }
 }
