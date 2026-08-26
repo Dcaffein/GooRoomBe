@@ -16,14 +16,25 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Create Firebase Config JSON
         run: |
           mkdir -p src/main/resources
           echo '${{ secrets.FIREBASE_CONFIG_JSON }}' > src/main/resources/dunbarhorizon-firebase.json
 
-      - name: Build with Gradle
-        run: ./gradlew build -x test
+      - name: Build and test with Gradle
+        run: ./gradlew build
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/reports/tests/test
+            build/test-results/test
+          retention-days: 7
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
