@@ -155,9 +155,11 @@ POST   /api/v1/friend-requests/{id}/reject     # reject
 ```
 GET    /api/v1/labels                          # list labels
 POST   /api/v1/labels                          # create label
-DELETE /api/v1/labels/{labelId}               # delete label
-PATCH  /api/v1/labels/{labelId}               # update label
-POST   /api/v1/labels/{labelId}/members        # add members
+GET    /api/v1/labels/{labelId}                # label detail
+PATCH  /api/v1/labels/{labelId}                # update label
+DELETE /api/v1/labels/{labelId}                # delete label
+GET    /api/v1/labels/{labelId}/members        # list members
+POST   /api/v1/labels/{labelId}/members        # add member (201 + Location)
 PUT    /api/v1/labels/{labelId}/members        # replace members
 DELETE /api/v1/labels/{labelId}/members/{userId} # remove member
 ```
