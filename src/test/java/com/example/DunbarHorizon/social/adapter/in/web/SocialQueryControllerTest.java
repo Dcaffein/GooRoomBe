@@ -56,6 +56,23 @@ class SocialQueryControllerTest extends BaseControllerTest {
     }
 
     @Test
+    @DisplayName("추천 결과는 사용자 식별 및 프로필 정보만 반환한다")
+    void getAnchorRecommendation_ResponseShape() throws Exception {
+        Long anchorId = 2L;
+        given(socialExpansionQueryUseCase.getRecommendationsByAnchor(eq(1L), eq(anchorId)))
+                .willReturn(List.of(new AnchorExpansionResult(3L, "추천 사용자")));
+
+        mockMvc.perform(get("/api/v1/network/recommendations")
+                        .param("anchorId", String.valueOf(anchorId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(3))
+                .andExpect(jsonPath("$[0].nickname").value("추천 사용자"))
+                .andExpect(jsonPath("$[0].intimacy").doesNotExist())
+                .andExpect(jsonPath("$[0].mutualCount").doesNotExist())
+                .andExpect(jsonPath("$[0].labelCount").doesNotExist());
+    }
+
+    @Test
     @DisplayName("연결 중개인 조회는 상위 3명과 전체 수를 내려주고 score는 포함하지 않는다")
     void getConnectionPath_Success() throws Exception {
         Long targetId = 99L;

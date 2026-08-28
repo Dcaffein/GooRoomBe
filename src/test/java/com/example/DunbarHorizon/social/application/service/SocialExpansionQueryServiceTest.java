@@ -102,7 +102,7 @@ class SocialExpansionQueryServiceTest {
         // given
         Long userId = 1L, anchorId = 10L;
         List<AnchorExpansionResult> expected = List.of(
-                new AnchorExpansionResult(100L, "유저A", 0.8, 2, 1)
+                new AnchorExpansionResult(100L, "유저A")
         );
         given(socialExpansionRepository.getRelatedNetworkByAnchor(eq(userId), eq(anchorId), anyInt(), anyInt()))
                 .willReturn(expected);
@@ -154,7 +154,7 @@ class SocialExpansionQueryServiceTest {
         // given
         Long userId = 1L, anchorId = 10L;
         List<AnchorExpansionResult> expected = List.of(
-                new AnchorExpansionResult(200L, "유저B", 0.7, 1, 0)
+                new AnchorExpansionResult(200L, "유저B")
         );
         given(friendshipRepository.findById(Friendship.generateCompositeId(userId, anchorId)))
                 .willReturn(Optional.of(friendship));
