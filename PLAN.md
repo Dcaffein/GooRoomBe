@@ -1,109 +1,44 @@
-# PLAN — 연결 중개인 범위 축소 (task-105) 구현 방법
+# PLAN — task-107 friend-request API 재설계
 
-브랜치: `ai/feat-connection-path-scope` (main에서 분기), 커밋 1개
+## 1. 조회 API 통합
 
-## 현황
+- `GET /api/v1/friend-requests?direction=&status=`로 통합한다.
+- `direction`을 `FriendRequestDirection`으로 변환하고 조회 in-port를 단일 메서드로 합친다.
+- `received`는 기본 `PENDING`, 명시값은 `PENDING`과 `HIDDEN`만 허용한다.
+- `sent`는 status를 받지 않고 `PENDING` 요청만 반환한다.
+- 기존 `/sent`, `/hidden` 조회 경로를 제거한다.
 
-| 위치 | 현재 |
-|---|---|
-| `SocialConnectionPathRepositoryAdapter:24-38` | Cypher에 `LIMIT` 없음. `mid`별 한 행씩 전부 반환 |
-| `:51` | `.all()` |
-| `ConnectionPathResult` | `(direct, intermediaries)`, `IntermediaryResult(userId, nickname, score)` |
-| `SocialConnectionPathQueryService` | 상수 없음. 리포지토리 결과를 그대로 통과시킨다 |
-| 테스트 | 0건. `BaseControllerTest:81`의 목 선언이 전부 |
+## 2. Action API 통합
 
-`score` 소비처는 어댑터와 DTO뿐이고 `/path`에는 `@Cacheable`이 없다.
+- `PATCH /api/v1/friend-requests/{counterpartId}`에서 상태를 변경한다.
+- `DELETE /api/v1/friend-requests/{counterpartId}`에서 보낸 요청을 취소한다.
+- service에서 현재 사용자와 상대 사용자 ID로 composite request ID를 생성한다.
+- 생성 응답의 `Location`도 counterpartId 기반 경로로 맞춘다.
+- 기존 `/{requestId}/accept`, `/{requestId}/hide`, `DELETE /{requestId}/hide`를 제거한다.
 
-## 변경 파일
+## 3. 상태 변경 캡슐화
 
-### 1. `ConnectionPathResult.java` (dto/result)
+- `FriendRequest`는 `updateStatus(userId, targetStatus)`와 `cancel(userId)`만 제공한다.
+- 상태 변경은 `targetStatus.update(request, userId)`에 위임한다.
+- 각 `FriendRequestStatus`가 허용되는 진입 상태와 수신자 권한을 검증한다.
+- 취소는 현재 상태의 `cancel`에 위임하고 `PENDING`만 신청자 권한을 검증한다.
+- 허용되지 않는 상태 변경과 취소는 공통 예외 helper로 거절한다.
+- ACCEPTED 전환 후 Friendship 생성, 요청 삭제, 기존 이벤트 발행을 유지한다.
 
-```java
-public record ConnectionPathResult(
-        boolean direct,
-        int totalCount,
-        List<IntermediaryResult> intermediaries
-) {
-    public record IntermediaryResult(Long userId, String nickname) {}
+## 4. 검증
 
-    /** 리포지토리가 상한 적용 목록과 전체 수를 함께 반환하기 위한 타입 */
-    public record Intermediaries(List<IntermediaryResult> items, int totalCount) {}
-}
+- Controller: 통합 조회, 세 상태 PATCH, 상태 누락 400, counterpartId DELETE
+- Service: composite ID 생성, 상태 저장, 수락 후 Friendship·이벤트 처리
+- Domain: 허용 전이, 금지 전이, 권한, PENDING 취소
+
+관련 테스트:
+
+```bash
+./gradlew test --tests '*FriendRequestControllerTest' \
+  --tests '*FriendRequestRequesterActionServiceTest' \
+  --tests '*FriendRequestReceiverActionServiceTest' \
+  --tests '*FriendRequestQueryServiceTest' \
+  --tests '*FriendRequestTest'
 ```
 
-필드 선언 순서가 JSON 순서다. `Intermediaries`는 `/path` 응답 조립에만 쓰이고
-포트 아웃이 이미 `ConnectionPathResult.IntermediaryResult`를 반환하고 있어 같은 자리에 중첩한다.
-
-### 2. `SocialConnectionPathRepository.java` (port out)
-
-```java
-ConnectionPathResult.Intermediaries findIntermediaries(Long myId, Long targetId, int limit);
-```
-
-`SocialNetworkRepository.getNetworkContactsOfTwoHop(..., int strangerQuota)`과 같은 형태로
-상한을 파라미터로 받는다.
-
-### 3. `SocialConnectionPathRepositoryAdapter.java`
-
-MATCH·WHERE·`score` 계산은 그대로 두고 마지막 `RETURN` 한 줄을 두 줄로 바꾼다.
-
-```cypher
-WITH mid, sqrt(f1.#{INTIMACY} * f2.#{INTIMACY}) AS score
-ORDER BY score DESC
-WITH collect({userId: mid.#{ID}, nickname: mid.#{NICK}}) AS ranked
-RETURN ranked[0..$limit] AS intermediaries, size(ranked) AS totalCount
-```
-
-- `ORDER BY`가 `collect` 앞이라 정렬 순서 그대로 리스트에 담긴다
-- `size(ranked)`는 자르기 전에 센다. 쿼리는 한 번으로 끝난다
-- `score`는 `collect` 맵에 넣지 않는다
-- 변수명을 `all`로 쓰지 않는다. Cypher 내장 술어 `all()`과 겹친다
-
-매핑은 행 하나를 받는 형태로 바뀐다.
-
-```java
-.mappedBy((ts, r) -> new ConnectionPathResult.Intermediaries(
-        r.get("intermediaries").asList(v -> new ConnectionPathResult.IntermediaryResult(
-                v.get("userId").asLong(), v.get("nickname").asString())),
-        r.get("totalCount").asInt()))
-.one().orElse(new ConnectionPathResult.Intermediaries(List.of(), 0));
-```
-
-`collect`는 그룹핑 키 없는 집계라 매치가 0건이어도 빈 리스트를 담은 행 하나가 나오지만
-`.orElse`로 받아둔다.
-
-### 4. `SocialConnectionPathQueryService.java`
-
-```java
-private static final int INTERMEDIARY_LIMIT = 3;
-```
-
-`SocialNetworkQueryService.STRANGER_QUOTA`, `SocialExpansionQueryService.REC_MAX_LIMIT`과 같은 자리다.
-`direct` 여부와 무관하게 2-hop을 도는 현재 흐름은 유지하고, 자기 자신 대상이면
-`new ConnectionPathResult(false, 0, List.of())`.
-
-## 테스트
-
-| 파일 | 상태 | 검증 |
-|---|---|---|
-| `social/adapter/out/SocialConnectionPathRepositoryAdapterTest` | 신규 | 상한·정렬·집계·프라이버시 |
-| `social/application/service/SocialConnectionPathQueryServiceTest` | 신규 | `direct = true`에서도 2-hop 실행, 자기 자신, 상수 전달 |
-| `social/adapter/in/web/SocialQueryControllerTest` | 추가 | 응답 본문에 `score` 없음, `totalCount` 있음 |
-
-리포지토리 테스트는 `SocialExpansionRepositoryAdapterTest`와 같이 `@Neo4jRepositoryTest` +
-`@Import(어댑터)`로 짠다. 픽스처는 나(1)-중개인 5명-타겟(99), 중개인마다 intimacy를 달리 줘
-순서를 만들고 한 명은 `r4.isRoutable = false`로 둔다.
-
-- 공통 친구 3명 이하 → 전부 반환, `totalCount`가 그 수와 같다
-- 공통 친구 5명 → `items` 3개, `totalCount` 5
-- `items`가 score 내림차순 상위 3명이다
-- `isRoutable = false`인 중개인 제외
-- 공통 친구 없음 → 빈 리스트, `totalCount` 0
-
-실행: `./gradlew test --tests '*ConnectionPath*' --tests '*SocialQueryControllerTest'`
-
-## 커밋
-
-```
-1. feat(social): 연결 중개인을 상위 3명과 전체 수로 좁힌다
-```
+`PLAN.md`, task 문서, `AGENTS.md`는 코드 커밋에서 제외한다.
