@@ -98,7 +98,8 @@ class LabelControllerTest extends BaseControllerTest {
         mockMvc.perform(post("/api/v1/labels/{labelId}/members", labelId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "/api/v1/labels/" + labelId + "/members/2"));
 
         verify(labelCommandUseCase).addMemberToLabel(anyLong(), eq(labelId), eq(2L));
     }
@@ -117,13 +118,31 @@ class LabelControllerTest extends BaseControllerTest {
     @Test
     @DisplayName("라벨 단건 정보를 조회한다")
     void getLabelById_Success() throws Exception {
-        LabelResult result = new LabelResult(labelId, "친구들", List.of());
+        LabelResult result = new LabelResult(labelId, "친구들", 1);
         given(labelQueryUseCase.getLabelById(eq(1L), eq(labelId))).willReturn(result);
 
         mockMvc.perform(get("/api/v1/labels/{labelId}", labelId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(labelId))
-                .andExpect(jsonPath("$.labelName").value("친구들"));
+                .andExpect(jsonPath("$.labelName").value("친구들"))
+                .andExpect(jsonPath("$.memberCount").value(1))
+                .andExpect(jsonPath("$.members").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("특정 멤버가 속한 내 라벨 목록을 조회한다")
+    void getAllLabels_ByMember() throws Exception {
+        Long memberId = 2L;
+        given(labelQueryUseCase.getLabelsByMember(eq(1L), eq(memberId)))
+                .willReturn(List.of(new LabelResult(labelId, "친구들", 1)));
+
+        mockMvc.perform(get("/api/v1/labels").param("memberId", String.valueOf(memberId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(labelId))
+                .andExpect(jsonPath("$[0].memberCount").value(1))
+                .andExpect(jsonPath("$[0].members").doesNotExist());
+
+        verify(labelQueryUseCase).getLabelsByMember(1L, memberId);
     }
 
     @Test

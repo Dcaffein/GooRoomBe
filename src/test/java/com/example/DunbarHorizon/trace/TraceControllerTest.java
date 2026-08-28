@@ -24,7 +24,7 @@ class TraceControllerTest extends BaseControllerTest {
         VisitRequestDto requestDto = new VisitRequestDto(targetId);
         given(traceCommandUseCase.recordTrace(eq(1L), eq(targetId))).willReturn(TraceResult.notRevealed());
 
-        mockMvc.perform(post("/api/v1/social/traces")
+        mockMvc.perform(post("/api/v1/traces")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestDto)))
                 .andExpect(status().isOk())
@@ -40,7 +40,7 @@ class TraceControllerTest extends BaseControllerTest {
         VisitRequestDto requestDto = new VisitRequestDto(targetId);
         given(traceCommandUseCase.recordTrace(eq(1L), eq(targetId))).willReturn(new TraceResult(true));
 
-        mockMvc.perform(post("/api/v1/social/traces")
+        mockMvc.perform(post("/api/v1/traces")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestDto)))
                 .andExpect(status().isOk())

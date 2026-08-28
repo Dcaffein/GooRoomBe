@@ -162,36 +162,39 @@ class SocialNetworkRepositoryAdapterTest {
         assertThat(result).isEmpty();
     }
 
-    // ───────── Two-Hop Contacts ─────────
+    // ───────── Two-Hop Edges ─────────
 
     @Test
-    @DisplayName("2-Hop 접점 조회 시 skeletonIds에 포함된 실제 공통 친구를 반환한다")
-    void getNetworkContactsOfTwoHop_skeletonIds_내_공통_친구를_반환한다() {
+    @DisplayName("2-Hop 엣지 조회 시 baseNetworkFriendIds에 포함된 실제 공통 친구 엣지를 반환한다")
+    void getTwoHopContactEdgesForTarget_baseNetworkFriendIds_내_공통_친구_엣지를_반환한다() {
         // me(1)의 친구 중 targetX(100)와도 연결된: B(20), C(30)
-        List<Long> result =
-                repository.getNetworkContactsOfTwoHop(1L, 100L, List.of(10L, 20L, 30L, 40L, 50L, 60L), 5);
+        List<MutualFriendEdgeResult> result =
+                repository.getTwoHopContactEdgesForTarget(1L, 100L, List.of(10L, 20L, 30L, 40L, 50L, 60L), 5);
 
         assertThat(result).hasSize(2);
-        assertThat(result).anyMatch(r -> r.equals(20L));
-        assertThat(result).anyMatch(r -> r.equals(30L));
+        assertThat(result).extracting(MutualFriendEdgeResult::friendAId)
+                .containsOnly(100L);
+        assertThat(result).extracting(MutualFriendEdgeResult::friendBId)
+                .containsExactlyInAnyOrder(20L, 30L);
+        assertThat(result).allMatch(r -> r.intimacy() == null);
     }
 
     @Test
-    @DisplayName("2-Hop 접점 조회 시 skeletonIds에 없는 친구는 결과에 포함되지 않는다")
-    void getNetworkContactsOfTwoHop_skeletonIds_밖의_친구는_결과에_포함되지_않는다() {
-        // B(20), C(30)를 skeletonIds에서 제외
-        List<Long> result =
-                repository.getNetworkContactsOfTwoHop(1L, 100L, List.of(10L, 40L, 50L, 60L), 5);
+    @DisplayName("2-Hop 엣지 조회 시 baseNetworkFriendIds에 없는 친구는 결과에 포함되지 않는다")
+    void getTwoHopContactEdgesForTarget_baseNetworkFriendIds_밖의_친구는_결과에_포함되지_않는다() {
+        // B(20), C(30)를 baseNetworkFriendIds에서 제외
+        List<MutualFriendEdgeResult> result =
+                repository.getTwoHopContactEdgesForTarget(1L, 100L, List.of(10L, 40L, 50L, 60L), 5);
 
         assertThat(result).isEmpty();
     }
 
     @Test
     @DisplayName("2-Hop 접점 조회 시 실제 내 친구가 아닌 ID는 HAS_FRIENDSHIP 검증에서 제외된다")
-    void getNetworkContactsOfTwoHop_비친구_ID는_보안_검증에서_제외된다() {
+    void getTwoHopContactEdgesForTarget_비친구_ID는_보안_검증에서_제외된다() {
         // 999, 998은 me의 친구가 아님
-        List<Long> result =
-                repository.getNetworkContactsOfTwoHop(1L, 100L, List.of(999L, 998L), 5);
+        List<MutualFriendEdgeResult> result =
+                repository.getTwoHopContactEdgesForTarget(1L, 100L, List.of(999L, 998L), 5);
 
         assertThat(result).isEmpty();
     }
@@ -200,10 +203,10 @@ class SocialNetworkRepositoryAdapterTest {
 
     @Test
     @DisplayName("1-Hop 엣지 조회 시 skeletonIds 내 공통 친구 엣지를 친밀도 내림차순으로 반환한다")
-    void getNewNodeEdges_skeletonIds_내_공통_친구_엣지를_반환한다() {
+    void getDirectFriendEdgesForTarget_baseNetworkFriendIds_내_공통_친구_엣지를_반환한다() {
         // targetX(100)와 연결된 me 친구: B(20, intimacy=0.6), C(30, intimacy=0.4)
         List<MutualFriendEdgeResult> result =
-                repository.getNewNodeEdges(1L, 100L, List.of(10L, 20L, 30L, 40L, 50L, 60L), 10);
+                repository.getDirectFriendEdgesForTarget(1L, 100L, List.of(10L, 20L, 30L, 40L, 50L, 60L), 10);
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).friendBId()).isEqualTo(20L);  // 높은 친밀도 먼저
@@ -213,10 +216,10 @@ class SocialNetworkRepositoryAdapterTest {
 
     @Test
     @DisplayName("1-Hop 엣지 조회 시 dynamicLimit만큼만 반환된다")
-    void getNewNodeEdges_dynamicLimit만큼만_반환된다() {
+    void getDirectFriendEdgesForTarget_dynamicLimit만큼만_반환된다() {
         // B(0.6), C(0.4) 중 limit=1이면 친밀도 높은 B만 반환
         List<MutualFriendEdgeResult> result =
-                repository.getNewNodeEdges(1L, 100L, List.of(10L, 20L, 30L, 40L, 50L, 60L), 1);
+                repository.getDirectFriendEdgesForTarget(1L, 100L, List.of(10L, 20L, 30L, 40L, 50L, 60L), 1);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).friendBId()).isEqualTo(20L);
@@ -224,9 +227,9 @@ class SocialNetworkRepositoryAdapterTest {
 
     @Test
     @DisplayName("1-Hop 엣지 조회 시 실제 내 친구가 아닌 ID는 HAS_FRIENDSHIP 검증에서 제외된다")
-    void getNewNodeEdges_비친구_ID는_보안_검증에서_제외된다() {
+    void getDirectFriendEdgesForTarget_비친구_ID는_보안_검증에서_제외된다() {
         List<MutualFriendEdgeResult> result =
-                repository.getNewNodeEdges(1L, 100L, List.of(999L, 998L), 10);
+                repository.getDirectFriendEdgesForTarget(1L, 100L, List.of(999L, 998L), 10);
 
         assertThat(result).isEmpty();
     }

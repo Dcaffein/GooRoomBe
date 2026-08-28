@@ -2,10 +2,13 @@ package com.example.DunbarHorizon.social.adapter.in.web;
 
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
 import com.example.DunbarHorizon.social.adapter.in.web.dto.FriendRequestCreateRequest;
+import com.example.DunbarHorizon.social.adapter.in.web.dto.FriendRequestStatusUpdateRequest;
 import com.example.DunbarHorizon.social.application.dto.result.FriendRequestResult;
+import com.example.DunbarHorizon.social.application.dto.FriendRequestDirection;
 import com.example.DunbarHorizon.social.application.port.in.FriendRequestReceiverActionUseCase;
 import com.example.DunbarHorizon.social.application.port.in.FriendRequestQueryUseCase;
 import com.example.DunbarHorizon.social.application.port.in.FriendRequesterActionUseCase;
+import com.example.DunbarHorizon.social.domain.friend.FriendRequestStatus;
 import com.example.DunbarHorizon.social.domain.friend.FriendRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,24 +28,13 @@ public class FriendRequestController {
     private final FriendRequestQueryUseCase queryUseCase;
 
     @GetMapping
-    public ResponseEntity<List<FriendRequestResult>> getReceivedRequests(
-            @CurrentUserId Long currentUserId) {
+    public ResponseEntity<List<FriendRequestResult>> getRequests(
+            @CurrentUserId Long currentUserId,
+            @RequestParam String direction,
+            @RequestParam(required = false) FriendRequestStatus status) {
 
-        return ResponseEntity.ok(queryUseCase.getReceivedRequests(currentUserId));
-    }
-
-    @GetMapping("/hidden")
-    public ResponseEntity<List<FriendRequestResult>> getHiddenRequests(
-            @CurrentUserId Long currentUserId) {
-
-        return ResponseEntity.ok(queryUseCase.getHiddenRequests(currentUserId));
-    }
-
-    @GetMapping("/sent")
-    public ResponseEntity<List<FriendRequestResult>> getSentRequests(
-            @CurrentUserId Long currentUserId) {
-
-        return ResponseEntity.ok(queryUseCase.getSentRequests(currentUserId));
+        return ResponseEntity.ok(queryUseCase.getRequests(
+                currentUserId, FriendRequestDirection.from(direction), status));
     }
 
     @PostMapping
@@ -54,43 +46,27 @@ public class FriendRequestController {
         FriendRequestResult response = FriendRequestResult.from(newRequest);
 
         return ResponseEntity
-                .created(URI.create("/api/v1/friend-requests/" + newRequest.getId()))
+                .created(URI.create(
+                        "/api/v1/friend-requests/" + newRequest.getReceiver().getId()))
                 .body(response);
     }
 
-    @DeleteMapping("/{requestId}")
+    @DeleteMapping("/{counterpartId}")
     public ResponseEntity<Void> cancelFriendRequest(
             @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
+            @PathVariable Long counterpartId) {
 
-        requesterActionUseCase.cancelRequest(requestId, currentUserId);
+        requesterActionUseCase.cancelRequest(counterpartId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/{requestId}/accept")
-    public ResponseEntity<Void> acceptFriendRequest(
+    @PatchMapping("/{counterpartId}")
+    public ResponseEntity<Void> updateFriendRequestStatus(
             @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
+            @PathVariable Long counterpartId,
+            @RequestBody @Valid FriendRequestStatusUpdateRequest request) {
 
-        receiverActionUseCase.acceptRequest(requestId, currentUserId);
-        return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/{requestId}/hide")
-    public ResponseEntity<Void> hideFriendRequest(
-            @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
-
-        receiverActionUseCase.hideRequest(requestId, currentUserId);
-        return ResponseEntity.noContent().build();
-    }
-
-    @DeleteMapping("/{requestId}/hide")
-    public ResponseEntity<Void> undoHideFriendRequest(
-            @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
-
-        receiverActionUseCase.undoHideRequest(requestId, currentUserId);
+        receiverActionUseCase.updateStatus(currentUserId, counterpartId, request.status());
         return ResponseEntity.noContent().build();
     }
 }

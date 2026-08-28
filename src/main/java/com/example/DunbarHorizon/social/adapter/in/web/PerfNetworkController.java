@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequiredArgsConstructor
 @Profile("perf")
-@RequestMapping("/api/perf/v1/networks")
+@RequestMapping("/api/perf/networks")
 public class PerfNetworkController {
 
     private final SocialNetworkQueryUseCase networkQueryUseCase;

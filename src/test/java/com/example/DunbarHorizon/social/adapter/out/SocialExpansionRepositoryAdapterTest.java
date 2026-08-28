@@ -107,8 +107,6 @@ class SocialExpansionRepositoryAdapterTest {
         List<AnchorExpansionResult> result2 = expansionRepository.getRecommendedNetworkByAnchor(1L, 10L, 2, 10);
         assertThat(result2).hasSize(1);
         assertThat(result2.get(0).id()).isEqualTo(200L);
-        assertThat(result2.get(0).mutualCount()).isEqualTo(1);
-        assertThat(result2.get(0).labelCount()).isEqualTo(1);
 
         // threshold가 3점일 때 (아무도 통과 못함)
         List<AnchorExpansionResult> result3 = expansionRepository.getRecommendedNetworkByAnchor(1L, 10L, 3, 10);

@@ -155,6 +155,25 @@ class LabelServiceTest {
         // then
         assertThat(result.id()).isEqualTo(labelId);
         assertThat(result.labelName()).isEqualTo("친구들");
+        assertThat(result.memberCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("특정 멤버가 속한 내 라벨만 조회한다")
+    void getLabelsByMember_Success() {
+        // given
+        Long memberId = 2L;
+        given(labelRepository.findLabelsByOwnerAndMember(currentUserId, memberId))
+                .willReturn(List.of(mockLabel));
+        given(mockLabel.getId()).willReturn(labelId);
+        given(mockLabel.getLabelName()).willReturn("친구들");
+        given(mockLabel.getMembers()).willReturn(Set.of());
+
+        // when
+        List<LabelResult> result = labelService.getLabelsByMember(currentUserId, memberId);
+
+        // then
+        assertThat(result).containsExactly(new LabelResult(labelId, "친구들", 0));
     }
 
     @Test

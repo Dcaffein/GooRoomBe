@@ -23,7 +23,7 @@ class SocialUserControllerTest extends BaseControllerTest {
         given(socialUserQueryUseCase.getSocialProfile(2L)).willReturn(profile);
 
         // when & then
-        mockMvc.perform(get("/api/v1/social/users/2"))
+        mockMvc.perform(get("/api/v1/social/profiles/2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(2L))
                 .andExpect(jsonPath("$.nickname").value("친구"))
@@ -38,7 +38,7 @@ class SocialUserControllerTest extends BaseControllerTest {
                 .willThrow(new UserReferenceNotFoundException(999L));
 
         // when & then
-        mockMvc.perform(get("/api/v1/social/users/999"))
+        mockMvc.perform(get("/api/v1/social/profiles/999"))
                 .andExpect(status().isNotFound());
     }
 }

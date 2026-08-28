@@ -102,6 +102,13 @@ public class LabelService implements LabelCommandUseCase, LabelQueryUseCase {
     }
 
     @Override
+    public List<LabelResult> getLabelsByMember(Long ownerId, Long memberId) {
+        return labelRepository.findLabelsByOwnerAndMember(ownerId, memberId).stream()
+                .map(LabelResult::from)
+                .toList();
+    }
+
+    @Override
     public LabelResult getLabelById(Long ownerId, String labelId) {
         Label label = getLabel(labelId);
         validateOwner(label, ownerId);

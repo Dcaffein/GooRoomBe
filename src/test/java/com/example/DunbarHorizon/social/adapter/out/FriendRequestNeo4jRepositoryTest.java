@@ -69,7 +69,7 @@ class FriendRequestNeo4jRepositoryTest {
                 .orElseThrow(() -> new AssertionError("저장된 요청을 찾을 수 없습니다."));
 
         // 도메인 행위 호출
-        saved.accept(receiver.getId());
+        saved.updateStatus(receiver.getId(), FriendRequestStatus.ACCEPTED);
 
         // when
         friendRequestRepository.updateFriendRequest(saved);

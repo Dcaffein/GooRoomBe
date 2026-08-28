@@ -40,7 +40,8 @@ public class FriendRequestRequesterActionService implements FriendRequesterActio
     }
 
     @Override
-    public void cancelRequest(String requestId, Long requesterId) {
+    public void cancelRequest(Long counterpartId, Long requesterId) {
+        String requestId = FriendRequest.generateId(requesterId, counterpartId);
         FriendRequest request = findRequestById(requestId);
         request.cancel(requesterId);
         friendRequestRepository.deleteById(requestId);

@@ -39,7 +39,7 @@ class FriendRequestTest {
         FriendRequest friendRequest = new FriendRequest(requester, receiver);
 
         // when
-        friendRequest.accept(2L);
+        friendRequest.updateStatus(2L, FriendRequestStatus.ACCEPTED);
 
         // then
         assertThat(friendRequest.getStatus()).isEqualTo(FriendRequestStatus.ACCEPTED);
@@ -52,8 +52,35 @@ class FriendRequestTest {
         FriendRequest request = new FriendRequest(requester, receiver);
 
         // when & then
-        assertThatThrownBy(() -> request.accept(1L))
+        assertThatThrownBy(() -> request.updateStatus(1L, FriendRequestStatus.ACCEPTED))
                 .isInstanceOf(FriendRequestAuthorizationException.class);
+    }
+
+    @Test
+    void updateStatus_ToHidden_Success() {
+        FriendRequest request = new FriendRequest(requester, receiver);
+
+        request.updateStatus(receiver.getId(), FriendRequestStatus.HIDDEN);
+
+        assertThat(request.getStatus()).isEqualTo(FriendRequestStatus.HIDDEN);
+    }
+
+    @Test
+    void updateStatus_ToPending_FromHidden_Success() {
+        FriendRequest request = new FriendRequest(requester, receiver);
+        request.updateStatus(receiver.getId(), FriendRequestStatus.HIDDEN);
+
+        request.updateStatus(receiver.getId(), FriendRequestStatus.PENDING);
+
+        assertThat(request.getStatus()).isEqualTo(FriendRequestStatus.PENDING);
+    }
+
+    @Test
+    void updateStatus_WithoutTargetStatus_Fail() {
+        FriendRequest request = new FriendRequest(requester, receiver);
+
+        assertThatThrownBy(() -> request.updateStatus(receiver.getId(), null))
+                .isInstanceOf(FriendRequestInvalidException.class);
     }
 
     @Test

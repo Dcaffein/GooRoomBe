@@ -59,10 +59,7 @@ public class SocialExpansionRepositoryAdapter implements SocialExpansionReposito
             // [6] threshold 이상인 후보만 반환
             WHERE mutualCount + labelCount >= $threshold
             RETURN target.#{ID}       AS id,
-                   target.#{NICK}     AS nickname,
-                   targetFriendship.#{INTIMACY} AS intimacy,
-                   mutualCount        AS mutualCount,
-                   labelCount         AS labelCount
+                   target.#{NICK}     AS nickname
             LIMIT $limitCount
             """)
             .replace("#{UR}", USER_REFERENCE)
@@ -96,10 +93,7 @@ public class SocialExpansionRepositoryAdapter implements SocialExpansionReposito
                 .fetchAs(AnchorExpansionResult.class)
                 .mappedBy((typeSystem, record) -> new AnchorExpansionResult(
                         record.get("id").asLong(),
-                        record.get("nickname").asString(),
-                        record.get("intimacy").asDouble(0.0),
-                        record.get("mutualCount").asInt(0),
-                        record.get("labelCount").asInt(0)
+                        record.get("nickname").asString()
                 ))
                 .all()
                 .stream()

@@ -28,8 +28,12 @@ public class LabelController {
 
     @GetMapping
     public ResponseEntity<List<LabelResult>> getAllLabels(
-            @CurrentUserId Long currentUserId) {
+            @CurrentUserId Long currentUserId,
+            @RequestParam(required = false) Long memberId) {
 
+        if (memberId != null) {
+            return ResponseEntity.ok(labelQueryUseCase.getLabelsByMember(currentUserId, memberId));
+        }
         return ResponseEntity.ok(labelQueryUseCase.getAllLabels(currentUserId));
     }
 
@@ -97,7 +101,9 @@ public class LabelController {
             @RequestBody @Valid LabelMemberAddRequest labelMemberAddRequest) {
 
         labelCommandUseCase.addMemberToLabel(currentUserId, labelId, labelMemberAddRequest.memberId());
-        return ResponseEntity.noContent().build();
+        return ResponseEntity
+                .created(URI.create("/api/v1/labels/" + labelId + "/members/" + labelMemberAddRequest.memberId()))
+                .build();
     }
 
     @DeleteMapping("/{labelId}/members/{memberId}")

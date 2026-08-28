@@ -10,7 +10,7 @@ public class FriendTestFactory {
 
     public static FriendRequest createAcceptedRequest(UserReference req, UserReference res) {
         FriendRequest request = new FriendRequest(req, res);
-        request.accept(res.getId());
+        request.updateStatus(res.getId(), FriendRequestStatus.ACCEPTED);
         return request;
     }
 

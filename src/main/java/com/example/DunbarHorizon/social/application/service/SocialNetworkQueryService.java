@@ -19,7 +19,9 @@ public class SocialNetworkQueryService implements SocialNetworkQueryUseCase {
 
     private static final int PRUNING_EDGE_MIN   = 5;
     private static final int PRUNING_EDGE_RANGE = 10;
-    private static final int STRANGER_QUOTA     = 5;
+    private static final int DIRECT_EDGE_BASE_LIMIT          = 5;
+    private static final int DIRECT_EDGE_INTIMACY_MULTIPLIER = 5;
+    private static final int TWO_HOP_CONTACT_EDGE_QUOTA      = 5;
 
     private final SocialNetworkRepository socialNetworkRepository;
     private final FriendshipRepository friendshipRepository;
@@ -36,20 +38,16 @@ public class SocialNetworkQueryService implements SocialNetworkQueryUseCase {
 
     @Neo4jTransactional(readOnly = true)
     @Override
-    public List<MutualFriendEdgeResult> getNewNodeEdges(Long userId, Long targetId, List<Long> skeletonIds) {
-        if (skeletonIds == null || skeletonIds.isEmpty()) return List.of();
-        double intimacy = friendshipRepository
-                .findById(Friendship.generateCompositeId(userId, targetId))
-                .map(Friendship::getIntimacy)
-                .orElse(0.0);
-        int dynamicLimit = (int) (5 + intimacy * 5);
-        return socialNetworkRepository.getNewNodeEdges(userId, targetId, skeletonIds, dynamicLimit);
-    }
-
-    @Neo4jTransactional(readOnly = true)
-    @Override
-    public List<Long> getNetworkContactsOfTwoHop(Long userId, Long targetId, List<Long> skeletonIds) {
-        if (skeletonIds == null || skeletonIds.isEmpty()) return List.of();
-        return socialNetworkRepository.getNetworkContactsOfTwoHop(userId, targetId, skeletonIds, STRANGER_QUOTA);
+    public List<MutualFriendEdgeResult> getNetworkEdges(Long userId, Long targetId, List<Long> baseNetworkFriendIds) {
+        if (baseNetworkFriendIds == null || baseNetworkFriendIds.isEmpty()) return List.of();
+        return friendshipRepository.findById(Friendship.generateCompositeId(userId, targetId))
+                .map(friendship -> {
+                    int dynamicLimit = (int) (DIRECT_EDGE_BASE_LIMIT
+                            + friendship.getIntimacy() * DIRECT_EDGE_INTIMACY_MULTIPLIER);
+                    return socialNetworkRepository.getDirectFriendEdgesForTarget(
+                            userId, targetId, baseNetworkFriendIds, dynamicLimit);
+                })
+                .orElseGet(() -> socialNetworkRepository.getTwoHopContactEdgesForTarget(
+                        userId, targetId, baseNetworkFriendIds, TWO_HOP_CONTACT_EDGE_QUOTA));
     }
 }

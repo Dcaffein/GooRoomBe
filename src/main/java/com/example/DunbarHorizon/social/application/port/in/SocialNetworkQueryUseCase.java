@@ -9,6 +9,5 @@ import java.util.List;
 public interface SocialNetworkQueryUseCase {
     List<NodeGraphResult> getFriendsNetwork(Long userId, DunbarCircle circleSize);
     List<NodeGraphResult> getLabelNetwork(Long userId, String labelId);
-    List<MutualFriendEdgeResult> getNewNodeEdges(Long userId, Long targetId, List<Long> skeletonIds);
-    List<Long> getNetworkContactsOfTwoHop(Long userId, Long targetId, List<Long> skeletonIds);
+    List<MutualFriendEdgeResult> getNetworkEdges(Long userId, Long targetId, List<Long> baseNetworkFriendIds);
 }

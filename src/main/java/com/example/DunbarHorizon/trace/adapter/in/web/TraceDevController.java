@@ -90,7 +90,7 @@ public class TraceDevController {
                 "countThreeUserId", countThreeUserId,
                 "countThreeUserCount", 3,
                 "isRevealed", false,
-                "triggerReveal", "POST /api/v1/social/traces {\"targetId\":" + countThreeUserId + "} as user " + countTwoUserId
+                "triggerReveal", "POST /api/v1/traces {\"targetId\":" + countThreeUserId + "} as user " + countTwoUserId
         ));
     }
 }
