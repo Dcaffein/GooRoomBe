@@ -1,8 +1,9 @@
 package com.example.DunbarHorizon.flag.adapter.in.web;
 
 import com.example.DunbarHorizon.flag.adapter.in.web.dto.FlagInviteRequest;
-import com.example.DunbarHorizon.flag.application.dto.result.ReceivedFlagInvitationResult;
-import com.example.DunbarHorizon.flag.application.dto.result.SentFlagInvitationResult;
+import com.example.DunbarHorizon.flag.adapter.in.web.dto.FlagInvitationStatusUpdateRequest;
+import com.example.DunbarHorizon.flag.application.dto.FlagInvitationDirection;
+import com.example.DunbarHorizon.flag.application.dto.result.FlagInvitationResult;
 import com.example.DunbarHorizon.flag.application.port.in.FlagInvitationQueryUseCase;
 import com.example.DunbarHorizon.flag.application.port.in.FlagInvitationUseCase;
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
@@ -31,44 +32,32 @@ public class FlagInvitationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(invitationId);
     }
 
-    @GetMapping("/received")
-    public ResponseEntity<List<ReceivedFlagInvitationResult>> getReceived(
-            @CurrentUserId Long currentUserId
+    @GetMapping
+    public ResponseEntity<List<FlagInvitationResult>> getInvitations(
+            @CurrentUserId Long currentUserId,
+            @RequestParam String direction
     ) {
-        return ResponseEntity.ok(flagInvitationQueryUseCase.getReceived(currentUserId));
+        return ResponseEntity.ok(flagInvitationQueryUseCase.getInvitations(
+                currentUserId, FlagInvitationDirection.from(direction)
+        ));
     }
 
-    @GetMapping("/sent")
-    public ResponseEntity<List<SentFlagInvitationResult>> getSent(
-            @CurrentUserId Long currentUserId
-    ) {
-        return ResponseEntity.ok(flagInvitationQueryUseCase.getSent(currentUserId));
-    }
-
-    @PostMapping("/{invitationId}/accept")
-    public ResponseEntity<Void> accept(
+    @PatchMapping("/{invitationId}")
+    public ResponseEntity<Void> updateStatus(
             @PathVariable Long invitationId,
-            @CurrentUserId Long currentUserId
+            @CurrentUserId Long currentUserId,
+            @RequestBody @Valid FlagInvitationStatusUpdateRequest request
     ) {
-        flagInvitationUseCase.accept(invitationId, currentUserId);
-        return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/{invitationId}/reject")
-    public ResponseEntity<Void> reject(
-            @PathVariable Long invitationId,
-            @CurrentUserId Long currentUserId
-    ) {
-        flagInvitationUseCase.reject(invitationId, currentUserId);
-        return ResponseEntity.ok().build();
+        flagInvitationUseCase.updateStatus(invitationId, currentUserId, request.status());
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{invitationId}")
-    public ResponseEntity<Void> cancel(
+    public ResponseEntity<Void> delete(
             @PathVariable Long invitationId,
             @CurrentUserId Long currentUserId
     ) {
-        flagInvitationUseCase.cancel(invitationId, currentUserId);
+        flagInvitationUseCase.delete(invitationId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 }

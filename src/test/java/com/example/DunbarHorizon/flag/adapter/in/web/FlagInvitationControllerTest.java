@@ -1,7 +1,8 @@
 package com.example.DunbarHorizon.flag.adapter.in.web;
 
-import com.example.DunbarHorizon.flag.application.dto.result.ReceivedFlagInvitationResult;
-import com.example.DunbarHorizon.flag.application.dto.result.SentFlagInvitationResult;
+import com.example.DunbarHorizon.flag.application.dto.FlagInvitationDirection;
+import com.example.DunbarHorizon.flag.application.dto.result.FlagInvitationResult;
+import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationStatus;
 import com.example.DunbarHorizon.support.BaseControllerTest;
 import com.example.DunbarHorizon.support.WithMockCustomUser;
 import org.junit.jupiter.api.DisplayName;
@@ -69,73 +70,99 @@ class FlagInvitationControllerTest extends BaseControllerTest {
     }
 
     @Test
-    @DisplayName("플래그 하위의 구 초대 생성 URL은 더 이상 매핑되지 않는다")
-    void invite_LegacyNestedUrl_Returns404() throws Exception {
-        String body = """
-                {"inviteeId": 2}
-                """;
-
-        mockMvc.perform(post("/api/v1/flags/{flagId}/invitations", FLAG_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    @DisplayName("받은 초대 목록 조회 시 200을 반환하고 getReceived()를 호출한다")
-    void getReceived_Returns200() throws Exception {
-        ReceivedFlagInvitationResult result = new ReceivedFlagInvitationResult(
-                INVITATION_ID, FLAG_ID, "테스트 플래그", "설명", "초대한사람", LocalDateTime.now()
+    @DisplayName("받은 초대를 direction=received로 조회한다")
+    void getInvitations_Received_Returns200() throws Exception {
+        FlagInvitationResult result = new FlagInvitationResult(
+                INVITATION_ID, FLAG_ID, "테스트 플래그", "설명", "상대방", LocalDateTime.now()
         );
-        given(flagInvitationQueryUseCase.getReceived(CURRENT_USER_ID)).willReturn(List.of(result));
+        given(flagInvitationQueryUseCase.getInvitations(CURRENT_USER_ID, FlagInvitationDirection.RECEIVED))
+                .willReturn(List.of(result));
 
-        mockMvc.perform(get("/api/v1/flag-invitations/received"))
+        mockMvc.perform(get("/api/v1/flag-invitations").param("direction", "received"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(INVITATION_ID))
-                .andExpect(jsonPath("$[0].flagId").value(FLAG_ID));
+                .andExpect(jsonPath("$[0].flagId").value(FLAG_ID))
+                .andExpect(jsonPath("$[0].counterpartNickname").value("상대방"));
 
-        verify(flagInvitationQueryUseCase).getReceived(CURRENT_USER_ID);
+        verify(flagInvitationQueryUseCase)
+                .getInvitations(CURRENT_USER_ID, FlagInvitationDirection.RECEIVED);
     }
 
     @Test
-    @DisplayName("보낸 초대 목록 조회 시 200을 반환하고 getSent()를 호출한다")
-    void getSent_Returns200() throws Exception {
-        SentFlagInvitationResult result = new SentFlagInvitationResult(
-                INVITATION_ID, FLAG_ID, "테스트 플래그", "설명", "초대받은사람", LocalDateTime.now()
+    @DisplayName("보낸 초대를 direction=sent로 조회한다")
+    void getInvitations_Sent_Returns200() throws Exception {
+        FlagInvitationResult result = new FlagInvitationResult(
+                INVITATION_ID, FLAG_ID, "테스트 플래그", "설명", "상대방", LocalDateTime.now()
         );
-        given(flagInvitationQueryUseCase.getSent(CURRENT_USER_ID)).willReturn(List.of(result));
+        given(flagInvitationQueryUseCase.getInvitations(CURRENT_USER_ID, FlagInvitationDirection.SENT))
+                .willReturn(List.of(result));
 
-        mockMvc.perform(get("/api/v1/flag-invitations/sent"))
+        mockMvc.perform(get("/api/v1/flag-invitations").param("direction", "sent"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(INVITATION_ID));
 
-        verify(flagInvitationQueryUseCase).getSent(CURRENT_USER_ID);
+        verify(flagInvitationQueryUseCase)
+                .getInvitations(CURRENT_USER_ID, FlagInvitationDirection.SENT);
     }
 
     @Test
-    @DisplayName("초대 수락 시 200을 반환하고 accept()를 호출한다")
-    void accept_Returns200() throws Exception {
-        mockMvc.perform(post("/api/v1/flag-invitations/{invitationId}/accept", INVITATION_ID))
-                .andExpect(status().isOk());
-
-        verify(flagInvitationUseCase).accept(INVITATION_ID, CURRENT_USER_ID);
+    @DisplayName("초대 목록 조회에 direction이 없으면 400을 반환한다")
+    void getInvitations_MissingDirection_Returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/flag-invitations"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("초대 거절 시 200을 반환하고 reject()를 호출한다")
-    void reject_Returns200() throws Exception {
-        mockMvc.perform(post("/api/v1/flag-invitations/{invitationId}/reject", INVITATION_ID))
-                .andExpect(status().isOk());
-
-        verify(flagInvitationUseCase).reject(INVITATION_ID, CURRENT_USER_ID);
+    @DisplayName("지원하지 않는 direction이면 400을 반환한다")
+    void getInvitations_InvalidDirection_Returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/flag-invitations").param("direction", "all"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("초대 취소 시 204를 반환하고 cancel()를 호출한다")
-    void cancel_Returns204() throws Exception {
+    @DisplayName("초대 상태를 ACCEPTED로 변경하면 204를 반환한다")
+    void updateStatus_Accepted_Returns204() throws Exception {
+        String body = """
+                {"status": "ACCEPTED"}
+                """;
+
+        mockMvc.perform(patch("/api/v1/flag-invitations/{invitationId}", INVITATION_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNoContent());
+
+        verify(flagInvitationUseCase)
+                .updateStatus(INVITATION_ID, CURRENT_USER_ID, FlagInvitationStatus.ACCEPTED);
+    }
+
+    @Test
+    @DisplayName("초대 상태가 누락되면 400을 반환한다")
+    void updateStatus_MissingStatus_Returns400() throws Exception {
+        mockMvc.perform(patch("/api/v1/flag-invitations/{invitationId}", INVITATION_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("지원하지 않는 초대 상태면 400을 반환한다")
+    void updateStatus_UnsupportedStatus_Returns400() throws Exception {
+        String body = """
+                {"status": "REJECTED"}
+                """;
+
+        mockMvc.perform(patch("/api/v1/flag-invitations/{invitationId}", INVITATION_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("초대를 삭제하면 204를 반환한다")
+    void delete_Returns204() throws Exception {
         mockMvc.perform(delete("/api/v1/flag-invitations/{invitationId}", INVITATION_ID))
                 .andExpect(status().isNoContent());
 
-        verify(flagInvitationUseCase).cancel(INVITATION_ID, CURRENT_USER_ID);
+        verify(flagInvitationUseCase).delete(INVITATION_ID, CURRENT_USER_ID);
     }
 }

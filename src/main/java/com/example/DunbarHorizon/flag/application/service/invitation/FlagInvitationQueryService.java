@@ -1,8 +1,8 @@
 package com.example.DunbarHorizon.flag.application.service.invitation;
 
 import com.example.DunbarHorizon.flag.application.dto.info.FlagUserInfo;
-import com.example.DunbarHorizon.flag.application.dto.result.ReceivedFlagInvitationResult;
-import com.example.DunbarHorizon.flag.application.dto.result.SentFlagInvitationResult;
+import com.example.DunbarHorizon.flag.application.dto.FlagInvitationDirection;
+import com.example.DunbarHorizon.flag.application.dto.result.FlagInvitationResult;
 import com.example.DunbarHorizon.flag.application.port.in.FlagInvitationQueryUseCase;
 import com.example.DunbarHorizon.flag.application.port.out.FlagUserPort;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
@@ -29,34 +29,31 @@ public class FlagInvitationQueryService implements FlagInvitationQueryUseCase {
     private final FlagUserPort flagUserPort;
 
     @Override
-    public List<ReceivedFlagInvitationResult> getReceived(Long inviteeId) {
-        List<FlagInvitation> invitations = invitationRepository.findByInviteeId(inviteeId);
+    public List<FlagInvitationResult> getInvitations(Long userId, FlagInvitationDirection direction) {
+        List<FlagInvitation> invitations = switch (direction) {
+            case RECEIVED -> invitationRepository.findByInviteeId(userId);
+            case SENT -> invitationRepository.findByInviterId(userId);
+        };
         if (invitations.isEmpty()) return List.of();
 
-        Map<Long, Flag> flagMap = fetchFlagMap(invitations, FlagInvitation::getFlagId);
+        Function<FlagInvitation, Long> counterpartIdExtractor = switch (direction) {
+            case RECEIVED -> FlagInvitation::getInviterId;
+            case SENT -> FlagInvitation::getInviteeId;
+        };
+
+        Map<Long, Flag> flagMap = fetchFlagMap(invitations);
         Map<Long, FlagUserInfo> userMap = flagUserPort.findUserInfosByIds(
-                invitations.stream().map(FlagInvitation::getInviterId).collect(Collectors.toSet())
+                invitations.stream().map(counterpartIdExtractor).collect(Collectors.toSet())
         );
 
         return invitations.stream()
-                .filter(inv -> isRecruiting(flagMap.get(inv.getFlagId())) && userMap.containsKey(inv.getInviterId()))
-                .map(inv -> ReceivedFlagInvitationResult.of(inv, flagMap.get(inv.getFlagId()), userMap.get(inv.getInviterId())))
-                .toList();
-    }
-
-    @Override
-    public List<SentFlagInvitationResult> getSent(Long inviterId) {
-        List<FlagInvitation> invitations = invitationRepository.findByInviterId(inviterId);
-        if (invitations.isEmpty()) return List.of();
-
-        Map<Long, Flag> flagMap = fetchFlagMap(invitations, FlagInvitation::getFlagId);
-        Map<Long, FlagUserInfo> userMap = flagUserPort.findUserInfosByIds(
-                invitations.stream().map(FlagInvitation::getInviteeId).collect(Collectors.toSet())
-        );
-
-        return invitations.stream()
-                .filter(inv -> isRecruiting(flagMap.get(inv.getFlagId())) && userMap.containsKey(inv.getInviteeId()))
-                .map(inv -> SentFlagInvitationResult.of(inv, flagMap.get(inv.getFlagId()), userMap.get(inv.getInviteeId())))
+                .filter(invitation -> isRecruiting(flagMap.get(invitation.getFlagId())))
+                .filter(invitation -> userMap.containsKey(counterpartIdExtractor.apply(invitation)))
+                .map(invitation -> FlagInvitationResult.of(
+                        invitation,
+                        flagMap.get(invitation.getFlagId()),
+                        userMap.get(counterpartIdExtractor.apply(invitation))
+                ))
                 .toList();
     }
 
@@ -67,8 +64,8 @@ public class FlagInvitationQueryService implements FlagInvitationQueryUseCase {
         return flag != null && flag.isRecruiting();
     }
 
-    private Map<Long, Flag> fetchFlagMap(List<FlagInvitation> invitations, Function<FlagInvitation, Long> idExtractor) {
-        Set<Long> flagIds = invitations.stream().map(idExtractor).collect(Collectors.toSet());
+    private Map<Long, Flag> fetchFlagMap(List<FlagInvitation> invitations) {
+        Set<Long> flagIds = invitations.stream().map(FlagInvitation::getFlagId).collect(Collectors.toSet());
         return flagRepository.findAllByIdIn(flagIds).stream()
                 .collect(Collectors.toMap(Flag::getId, Function.identity()));
     }

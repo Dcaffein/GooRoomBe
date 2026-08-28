@@ -71,26 +71,17 @@ public class FlagInvitationManager {
         return FlagInvitation.create(flagId, inviterId, inviteeId);
     }
 
-    public FlagParticipant accept(Long invitationId, Long acceptorId) {
+    public FlagParticipant updateStatus(
+            Long invitationId,
+            Long requesterId,
+            FlagInvitationStatus status
+    ) {
         FlagInvitation invitation = invitationRepository.findById(invitationId)
                 .orElseThrow(() -> new FlagInvitationNotFoundException(invitationId));
 
-        invitation.accept(acceptorId);
+        invitation.updateStatus(requesterId, status);
 
-        return flagParticipationManager.participateByInvitation(invitation.getFlagId(), acceptorId);
+        return flagParticipationManager.participateByInvitation(invitation.getFlagId(), requesterId);
     }
 
-    public void reject(Long invitationId, Long rejectorId) {
-        FlagInvitation invitation = invitationRepository.findById(invitationId)
-                .orElseThrow(() -> new FlagInvitationNotFoundException(invitationId));
-
-        invitation.reject(rejectorId);
-    }
-
-    public void cancel(Long invitationId, Long requesterId) {
-        FlagInvitation invitation = invitationRepository.findById(invitationId)
-                .orElseThrow(() -> new FlagInvitationNotFoundException(invitationId));
-
-        invitation.cancel(requesterId);
-    }
 }

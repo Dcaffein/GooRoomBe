@@ -7,7 +7,9 @@ import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundExceptio
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitation;
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationManager;
+import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationStatus;
 import com.example.DunbarHorizon.flag.domain.invitation.event.FlagInvitationSentEvent;
+import com.example.DunbarHorizon.flag.domain.invitation.exception.FlagInvitationNotFoundException;
 import com.example.DunbarHorizon.flag.domain.invitation.repository.FlagInvitationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,21 +51,18 @@ public class FlagInvitationCommandService implements FlagInvitationUseCase {
     }
 
     @Override
-    public void accept(Long invitationId, Long acceptorId) {
-        FlagParticipant newParticipant = invitationManager.accept(invitationId, acceptorId);
+    public void updateStatus(Long invitationId, Long requesterId, FlagInvitationStatus status) {
+        FlagParticipant newParticipant = invitationManager.updateStatus(invitationId, requesterId, status);
         flagRepository.saveParticipant(newParticipant);
         invitationRepository.deleteById(invitationId);
     }
 
     @Override
-    public void reject(Long invitationId, Long rejectorId) {
-        invitationManager.reject(invitationId, rejectorId);
-        invitationRepository.deleteById(invitationId);
-    }
+    public void delete(Long invitationId, Long requesterId) {
+        FlagInvitation invitation = invitationRepository.findById(invitationId)
+                .orElseThrow(() -> new FlagInvitationNotFoundException(invitationId));
 
-    @Override
-    public void cancel(Long invitationId, Long requesterId) {
-        invitationManager.cancel(invitationId, requesterId);
+        invitation.delete(requesterId);
         invitationRepository.deleteById(invitationId);
     }
 }
