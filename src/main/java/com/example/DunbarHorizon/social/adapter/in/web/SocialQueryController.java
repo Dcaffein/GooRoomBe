@@ -17,7 +17,7 @@ import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/networks")
+@RequestMapping("/api/v1/network")
 public class SocialQueryController {
 
     private final SocialExpansionQueryUseCase expansionQueryUseCase;
@@ -28,7 +28,7 @@ public class SocialQueryController {
      * 메인 홈 네트워크 (Soft Morphing 적용으로 1개의 API로 통합)
      * 프론트엔드는 슬라이더 위치에 따라 circleSize(SUPPORT, SYMPATHY, KINSHIP, DUNBAR)를 보냄
      */
-    @GetMapping("/me")
+    @GetMapping
     public ResponseEntity<List<NodeGraphResult>> getFriendsNetwork(
             @CurrentUserId Long currentUserId,
             @RequestParam(defaultValue = "DUNBAR") DunbarCircle circleSize
@@ -52,28 +52,19 @@ public class SocialQueryController {
      * 1-Hop 친구를 기존 네트워크에 수동 추가
      * 클라이언트가 현재 화면의 skeleton ID 목록을 전달하여 동적 컨텍스트 반영 및 보안 검증
      */
-    @GetMapping("/mutual/one-hop")
-    public ResponseEntity<List<MutualFriendEdgeResult>> getOneHopMutualFriendEdges(
+    @GetMapping("/edges")
+    public ResponseEntity<List<MutualFriendEdgeResult>> getNetworkEdges(
             @CurrentUserId Long currentUserId,
             @RequestParam Long targetId,
-            @RequestParam List<Long> skeletonIds
+            @RequestParam List<Long> baseNetworkFriendIds
     ) {
-        return ResponseEntity.ok(networkQueryUseCase.getNewNodeEdges(currentUserId, targetId, skeletonIds));
+        return ResponseEntity.ok(networkQueryUseCase.getNetworkEdges(currentUserId, targetId, baseNetworkFriendIds));
     }
 
     /**
      * 2-Hop 유저와 기존 네트워크와의 접점
      * 클라이언트가 현재 화면의 skeleton ID 목록을 전달하여 동적 컨텍스트 반영 및 보안 검증
      */
-    @GetMapping("/mutual/two-hop")
-    public ResponseEntity<List<Long>> getTwoHopMutualFriends(
-            @CurrentUserId Long currentUserId,
-            @RequestParam Long targetId,
-            @RequestParam List<Long> skeletonIds
-    ) {
-        return ResponseEntity.ok(networkQueryUseCase.getNetworkContactsOfTwoHop(currentUserId, targetId, skeletonIds));
-    }
-
     @GetMapping("/recommendations")
     public ResponseEntity<List<AnchorExpansionResult>> getTwoHopRecommendation(
             @CurrentUserId Long currentUserId,

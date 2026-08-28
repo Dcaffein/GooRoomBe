@@ -109,21 +109,21 @@ public class SocialNetworkRepositoryAdapter implements SocialNetworkRepository {
             .replace("#{INTEREST}", PROP_INTEREST_SCORE)
             + NETWORK_PRUNING_SUFFIX;
 
-    private static final String GET_NETWORK_CONTACTS_OF_TWO_HOP = ("""
+    private static final String GET_TWO_HOP_CONTACT_EDGES_FOR_TARGET = ("""
             // 2-hop target과 현재 화면 skeleton 내에서 공통 친구를 친밀도 순으로 최대 5명 반환
-            // skeletonIds: 클라이언트가 전달한 현재 화면의 내 친구 ID 목록 (보안 검증 겸용)
+            // baseNetworkFriendIds: 클라이언트가 전달한 기준 네트워크의 친구 ID 목록 (보안 검증 겸용)
             MATCH (me:#{UR} {#{ID}: $meId})
             WITH me
             MATCH (target:#{UR} {#{ID}: $targetId})
             CALL (me, target) {
               MATCH (me)-[:#{HF}]->(:#{F})<-[:#{HF}]-(mutual:#{UR})
-              WHERE mutual.#{ID} IN $skeletonIds
+              WHERE mutual.#{ID} IN $baseNetworkFriendIds
               MATCH (target)-[:#{HF}]->(tf:#{F})<-[:#{HF}]-(mutual)
               ORDER BY tf.#{INTIMACY} DESC
               LIMIT $strangerQuota
               RETURN mutual, tf
             }
-            RETURN mutual.#{ID} AS friendId
+            RETURN target.#{ID} AS friendAId, mutual.#{ID} AS friendBId
             """)
             .replace("#{UR}", USER_REFERENCE)
             .replace("#{F}", FRIENDSHIP)
@@ -131,16 +131,16 @@ public class SocialNetworkRepositoryAdapter implements SocialNetworkRepository {
             .replace("#{ID}", PROP_ID)
             .replace("#{INTIMACY}", PROP_INTIMACY);
 
-    private static final String GET_NEW_NODE_EDGES = ("""
+    private static final String GET_DIRECT_FRIEND_EDGES_FOR_TARGET = ("""
             // 동적으로 새 노드를 추가할 때 기존 네트워크와의 연결 엣지를 반환
             // dynamicLimit: me→target 친밀도 기반으로 서비스 레이어에서 계산 (5 + intimacy * 5)
-            // skeletonIds: 현재 화면 skeleton ID (내 친구인지 검증 + 공통 친구 필터)
+            // baseNetworkFriendIds: 기준 네트워크의 친구 ID (내 친구인지 검증 + 공통 친구 필터)
             MATCH (me:#{UR} {#{ID}: $meId})
             WITH me
             MATCH (target:#{UR} {#{ID}: $targetId})
             CALL (me, target) {
               MATCH (me)-[:#{HF}]->(:#{F})<-[:#{HF}]-(mutual:#{UR})
-              WHERE mutual.#{ID} IN $skeletonIds
+              WHERE mutual.#{ID} IN $baseNetworkFriendIds
               MATCH (target)-[:#{HF}]->(tf:#{F})<-[:#{HF}]-(mutual)
               ORDER BY tf.#{INTIMACY} DESC
               LIMIT $dynamicLimit
@@ -197,25 +197,29 @@ public class SocialNetworkRepositoryAdapter implements SocialNetworkRepository {
     }
 
     @Override
-    public List<Long> getNetworkContactsOfTwoHop(
-            Long userId, Long targetId, List<Long> skeletonIds, int strangerQuota) {
-        return neo4jClient.query(GET_NETWORK_CONTACTS_OF_TWO_HOP)
+    public List<MutualFriendEdgeResult> getTwoHopContactEdgesForTarget(
+            Long userId, Long targetId, List<Long> baseNetworkFriendIds, int strangerQuota) {
+        return neo4jClient.query(GET_TWO_HOP_CONTACT_EDGES_FOR_TARGET)
                 .bind(userId).to("meId")
                 .bind(targetId).to("targetId")
-                .bind(skeletonIds).to("skeletonIds")
+                .bind(baseNetworkFriendIds).to("baseNetworkFriendIds")
                 .bind(strangerQuota).to("strangerQuota")
-                .fetchAs(Long.class)
-                .mappedBy((typeSystem, record) -> record.get("friendId").asLong())
+                .fetchAs(MutualFriendEdgeResult.class)
+                .mappedBy((typeSystem, record) -> new MutualFriendEdgeResult(
+                        record.get("friendAId").asLong(),
+                        record.get("friendBId").asLong(),
+                        null
+                ))
                 .all().stream().toList();
     }
 
     @Override
-    public List<MutualFriendEdgeResult> getNewNodeEdges(
-            Long userId, Long targetId, List<Long> skeletonIds, int dynamicLimit) {
-        return neo4jClient.query(GET_NEW_NODE_EDGES)
+    public List<MutualFriendEdgeResult> getDirectFriendEdgesForTarget(
+            Long userId, Long targetId, List<Long> baseNetworkFriendIds, int dynamicLimit) {
+        return neo4jClient.query(GET_DIRECT_FRIEND_EDGES_FOR_TARGET)
                 .bind(userId).to("meId")
                 .bind(targetId).to("targetId")
-                .bind(skeletonIds).to("skeletonIds")
+                .bind(baseNetworkFriendIds).to("baseNetworkFriendIds")
                 .bind(dynamicLimit).to("dynamicLimit")
                 .fetchAs(MutualFriendEdgeResult.class)
                 .mappedBy((typeSystem, record) -> new MutualFriendEdgeResult(

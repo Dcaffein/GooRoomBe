@@ -113,24 +113,21 @@ PATCH  /api/auth/tokens                   # refresh tokens
 > 로컬 가입은 **사전 인증** 방식이다. 이메일 소유가 증명되기 전에는 `users`/`auths`에
 > 행이 생기지 않으며, 비밀번호는 링크 클릭 후에 입력받는다.
 
-### Social Network (`/api/v1/networks`)
+### Social Network (`/api/v1/network`)
 ```
-GET /api/v1/networks/me?circleSize=DUNBAR
+GET /api/v1/network?circleSize=DUNBAR
     → List<NodeGraphResult>          # default intimacy network (Soft Morphing)
 
-GET /api/v1/networks/labels/{labelId}
+GET /api/v1/network/labels/{labelId}
     → List<NodeGraphResult>          # label-filtered network (최대 150명)
 
-GET /api/v1/networks/mutual/one-hop?targetId=..&skeletonIds=..
-    → List<MutualFriendEdgeResult>   # drag-and-drop friend addition
+GET /api/v1/network/edges?targetId=..&baseNetworkFriendIds=..
+    → List<MutualFriendEdgeResult>   # direct friend / 2-hop edges
 
-GET /api/v1/networks/mutual/two-hop?targetId=..&skeletonIds=..
-    → List<Long>                     # 2-hop 유저와 기존 네트워크의 접점 ID
-
-GET /api/v1/networks/recommendations?anchorId=..
+GET /api/v1/network/recommendations?anchorId=..
     → List<AnchorExpansionResult>    # anchor expansion suggestions
 
-GET /api/v1/networks/path?targetId=..
+GET /api/v1/network/path?targetId=..
     → ConnectionPathResult           # 유저 간 연결 중개인 탐색
 ```
 

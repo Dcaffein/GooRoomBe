@@ -2,6 +2,7 @@ package com.example.DunbarHorizon.social.adapter.in.web;
 
 import com.example.DunbarHorizon.social.application.dto.result.AnchorExpansionResult;
 import com.example.DunbarHorizon.social.application.dto.result.ConnectionPathResult;
+import com.example.DunbarHorizon.social.application.dto.result.MutualFriendEdgeResult;
 import com.example.DunbarHorizon.social.application.dto.result.NodeGraphResult;
 import com.example.DunbarHorizon.social.domain.friend.DunbarCircle;
 import com.example.DunbarHorizon.support.BaseControllerTest;
@@ -25,7 +26,7 @@ class SocialQueryControllerTest extends BaseControllerTest {
         given(socialNetworkQueryUseCase.getFriendsNetwork(eq(1L), eq(DunbarCircle.DUNBAR)))
                 .willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/networks/me"))
+        mockMvc.perform(get("/api/v1/network"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
     }
@@ -37,7 +38,7 @@ class SocialQueryControllerTest extends BaseControllerTest {
         given(socialNetworkQueryUseCase.getLabelNetwork(eq(1L), eq(labelId)))
                 .willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/networks/labels/{labelId}", labelId))
+        mockMvc.perform(get("/api/v1/network/labels/{labelId}", labelId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
     }
@@ -48,7 +49,7 @@ class SocialQueryControllerTest extends BaseControllerTest {
         Long anchorId = 2L;
         given(socialExpansionQueryUseCase.getRecommendationsByAnchor(eq(1L), eq(anchorId))).willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/networks/recommendations")
+        mockMvc.perform(get("/api/v1/network/recommendations")
                         .param("anchorId", String.valueOf(anchorId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
@@ -65,7 +66,7 @@ class SocialQueryControllerTest extends BaseControllerTest {
                         new ConnectionPathResult.IntermediaryResult(4L, "중개인4")
                 )));
 
-        mockMvc.perform(get("/api/v1/networks/path")
+        mockMvc.perform(get("/api/v1/network/path")
                         .param("targetId", String.valueOf(targetId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.direct").value(false))
@@ -74,5 +75,20 @@ class SocialQueryControllerTest extends BaseControllerTest {
                 .andExpect(jsonPath("$.intermediaries[0].userId").value(2))
                 .andExpect(jsonPath("$.intermediaries[0].nickname").value("중개인2"))
                 .andExpect(jsonPath("$.intermediaries[0].score").doesNotExist());
+    }
+    @Test
+    @DisplayName("edges 경로로 직접 친구와 2-hop 엣지를 통합 조회한다")
+    void getNetworkEdges_Success() throws Exception {
+        Long targetId = 2L;
+        given(socialNetworkQueryUseCase.getNetworkEdges(eq(1L), eq(targetId), eq(List.of(3L, 4L))))
+                .willReturn(List.of(new MutualFriendEdgeResult(targetId, 3L, null)));
+
+        mockMvc.perform(get("/api/v1/network/edges")
+                        .param("targetId", String.valueOf(targetId))
+                        .param("baseNetworkFriendIds", "3", "4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].friendAId").value(2))
+                .andExpect(jsonPath("$[0].friendBId").value(3))
+                .andExpect(jsonPath("$[0].intimacy").doesNotExist());
     }
 }

@@ -37,132 +37,70 @@ class SocialNetworkQueryServiceTest {
     @InjectMocks
     private SocialNetworkQueryService service;
 
-    // ── getFriendsNetwork ──────────────────────────────────────────────────────
-
     @Test
-    @DisplayName("getFriendsNetwork: Repository의 getDefaultNetworkGraph 결과를 그대로 반환한다")
-    void getFriendsNetwork_getDefaultNetworkGraph_결과를_반환한다() {
-        Long userId = 1L;
-        DunbarCircle circleSize = DunbarCircle.KINSHIP;
+    @DisplayName("getFriendsNetwork: 기본 네트워크 결과를 반환한다")
+    void getFriendsNetwork_결과를_반환한다() {
         List<NodeGraphResult> expected = List.of(
-                new NodeGraphResult(10L, 0.7, List.of(new NodeEdgeResult(20L, 0.85, 0.3))),
-                new NodeGraphResult(20L, 0.3, List.of(new NodeEdgeResult(10L, 0.85, 0.7))),
-                new NodeGraphResult(30L, 0.0, List.of())
+                new NodeGraphResult(10L, 0.7, List.of(new NodeEdgeResult(20L, 0.85, 0.3)))
         );
-        given(socialNetworkRepository.getDefaultNetworkGraph(userId, circleSize, 5, 10)).willReturn(expected);
+        given(socialNetworkRepository.getDefaultNetworkGraph(1L, DunbarCircle.KINSHIP, 5, 10))
+                .willReturn(expected);
 
-        List<NodeGraphResult> result = service.getFriendsNetwork(userId, circleSize);
+        List<NodeGraphResult> result = service.getFriendsNetwork(1L, DunbarCircle.KINSHIP);
 
-        verify(socialNetworkRepository).getDefaultNetworkGraph(userId, circleSize, 5, 10);
+        verify(socialNetworkRepository).getDefaultNetworkGraph(1L, DunbarCircle.KINSHIP, 5, 10);
         assertThat(result).isEqualTo(expected);
     }
 
-    // ── getLabelNetwork ────────────────────────────────────────────────────────
-
     @Test
-    @DisplayName("getLabelNetwork: Repository에 userId와 labelId를 그대로 전달하고 결과를 반환한다")
-    void getLabelNetwork_Repository에_올바른_파라미터를_전달하고_결과를_반환한다() {
-        Long userId = 1L;
-        String labelId = "label-abc";
-        List<NodeGraphResult> expected = List.of(
-                new NodeGraphResult(10L, 0.3, List.of(new NodeEdgeResult(20L, 0.85, 0.7)))
-        );
-        given(socialNetworkRepository.getLabelCustomNetwork(userId, labelId, DunbarCircle.DUNBAR, 5, 10)).willReturn(expected);
+    @DisplayName("getLabelNetwork: 라벨 네트워크는 DUNBAR 크기로 조회한다")
+    void getLabelNetwork_결과를_반환한다() {
+        given(socialNetworkRepository.getLabelCustomNetwork(1L, "label-1", DunbarCircle.DUNBAR, 5, 10))
+                .willReturn(List.of());
 
-        List<NodeGraphResult> result = service.getLabelNetwork(userId, labelId);
+        List<NodeGraphResult> result = service.getLabelNetwork(1L, "label-1");
 
-        verify(socialNetworkRepository).getLabelCustomNetwork(userId, labelId, DunbarCircle.DUNBAR, 5, 10);
-        assertThat(result).isEqualTo(expected);
-    }
-
-    // ── getNewNodeEdges ────────────────────────────────────────────────────────
-
-    @Test
-    @DisplayName("getNewNodeEdges: skeletonIds가 null이면 빈 리스트를 반환하고 Repository를 호출하지 않는다")
-    void getNewNodeEdges_skeletonIds_null이면_빈_리스트_반환() {
-        assertThat(service.getNewNodeEdges(1L, 10L, null)).isEmpty();
-        verifyNoInteractions(socialNetworkRepository);
+        verify(socialNetworkRepository).getLabelCustomNetwork(1L, "label-1", DunbarCircle.DUNBAR, 5, 10);
+        assertThat(result).isEmpty();
     }
 
     @Test
-    @DisplayName("getNewNodeEdges: skeletonIds가 비어있으면 빈 리스트를 반환하고 Repository를 호출하지 않는다")
-    void getNewNodeEdges_skeletonIds_빈_리스트이면_빈_리스트_반환() {
-        assertThat(service.getNewNodeEdges(1L, 10L, List.of())).isEmpty();
-        verifyNoInteractions(socialNetworkRepository);
+    @DisplayName("getNetworkEdges: baseNetworkFriendIds가 비어있으면 Repository를 호출하지 않는다")
+    void getNetworkEdges_baseNetworkFriendIds가_비어있으면_빈_리스트() {
+        assertThat(service.getNetworkEdges(1L, 10L, null)).isEmpty();
+        assertThat(service.getNetworkEdges(1L, 10L, List.of())).isEmpty();
+
+        verifyNoInteractions(socialNetworkRepository, friendshipRepository);
     }
 
     @Test
-    @DisplayName("getNewNodeEdges: intimacy=0.5이면 dynamicLimit=7 (5 + 0.5*5)로 Repository를 호출한다")
-    void getNewNodeEdges_intimacy로_dynamicLimit을_계산해서_Repository에_전달한다() {
-        Long userId = 1L, targetId = 10L;
-        List<Long> skeletonIds = List.of(20L, 30L);
-        given(friendshipRepository.findById(Friendship.generateCompositeId(userId, targetId)))
+    @DisplayName("getNetworkEdges: 직접 친구이면 dynamicLimit으로 1-hop 엣지를 조회한다")
+    void getNetworkEdges_직접_친구() {
+        List<Long> baseNetworkFriendIds = List.of(20L, 30L);
+        List<MutualFriendEdgeResult> expected = List.of(new MutualFriendEdgeResult(10L, 20L, 0.6));
+        given(friendshipRepository.findById(Friendship.generateCompositeId(1L, 10L)))
                 .willReturn(Optional.of(friendship));
         given(friendship.getIntimacy()).willReturn(0.5);
-        given(socialNetworkRepository.getNewNodeEdges(userId, targetId, skeletonIds, 7)).willReturn(List.of());
+        given(socialNetworkRepository.getDirectFriendEdgesForTarget(1L, 10L, baseNetworkFriendIds, 7)).willReturn(expected);
 
-        service.getNewNodeEdges(userId, targetId, skeletonIds);
+        List<MutualFriendEdgeResult> result = service.getNetworkEdges(1L, 10L, baseNetworkFriendIds);
 
-        verify(socialNetworkRepository).getNewNodeEdges(userId, targetId, skeletonIds, 7);
-    }
-
-    @Test
-    @DisplayName("getNewNodeEdges: me→target 친구 관계가 없으면 intimacy=0.0으로 fallback, dynamicLimit=5")
-    void getNewNodeEdges_친구관계_없으면_dynamicLimit_5로_fallback() {
-        Long userId = 1L, targetId = 10L;
-        List<Long> skeletonIds = List.of(20L);
-        given(friendshipRepository.findById(Friendship.generateCompositeId(userId, targetId)))
-                .willReturn(Optional.empty());
-        given(socialNetworkRepository.getNewNodeEdges(userId, targetId, skeletonIds, 5)).willReturn(List.of());
-
-        service.getNewNodeEdges(userId, targetId, skeletonIds);
-
-        verify(socialNetworkRepository).getNewNodeEdges(userId, targetId, skeletonIds, 5);
-    }
-
-    @Test
-    @DisplayName("getNewNodeEdges: Repository 결과를 그대로 반환한다")
-    void getNewNodeEdges_결과를_그대로_반환한다() {
-        Long userId = 1L, targetId = 10L;
-        List<Long> skeletonIds = List.of(20L);
-        List<MutualFriendEdgeResult> expected = List.of(new MutualFriendEdgeResult(10L, 20L, 0.6));
-        given(friendshipRepository.findById(Friendship.generateCompositeId(userId, targetId)))
-                .willReturn(Optional.of(friendship));
-        given(friendship.getIntimacy()).willReturn(0.8);
-        given(socialNetworkRepository.getNewNodeEdges(userId, targetId, skeletonIds, 9)).willReturn(expected);
-
-        List<MutualFriendEdgeResult> result = service.getNewNodeEdges(userId, targetId, skeletonIds);
-
+        verify(socialNetworkRepository).getDirectFriendEdgesForTarget(1L, 10L, baseNetworkFriendIds, 7);
         assertThat(result).isEqualTo(expected);
     }
 
-    // ── getNetworkContactsOfTwoHop ─────────────────────────────────────────────
-
     @Test
-    @DisplayName("getNetworkContactsOfTwoHop: skeletonIds가 null이면 빈 리스트를 반환하고 Repository를 호출하지 않는다")
-    void getNetworkContactsOfTwoHop_skeletonIds_null이면_빈_리스트_반환() {
-        assertThat(service.getNetworkContactsOfTwoHop(1L, 10L, null)).isEmpty();
-        verifyNoInteractions(socialNetworkRepository);
-    }
+    @DisplayName("getNetworkEdges: 직접 친구가 아니면 strangerQuota로 2-hop 엣지를 조회한다")
+    void getNetworkEdges_직접_친구가_아니면_2홉() {
+        List<Long> baseNetworkFriendIds = List.of(20L, 30L);
+        List<MutualFriendEdgeResult> expected = List.of(new MutualFriendEdgeResult(10L, 20L, null));
+        given(friendshipRepository.findById(Friendship.generateCompositeId(1L, 10L)))
+                .willReturn(Optional.empty());
+        given(socialNetworkRepository.getTwoHopContactEdgesForTarget(1L, 10L, baseNetworkFriendIds, 5)).willReturn(expected);
 
-    @Test
-    @DisplayName("getNetworkContactsOfTwoHop: skeletonIds가 비어있으면 빈 리스트를 반환하고 Repository를 호출하지 않는다")
-    void getNetworkContactsOfTwoHop_skeletonIds_빈_리스트이면_빈_리스트_반환() {
-        assertThat(service.getNetworkContactsOfTwoHop(1L, 10L, List.of())).isEmpty();
-        verifyNoInteractions(socialNetworkRepository);
-    }
+        List<MutualFriendEdgeResult> result = service.getNetworkEdges(1L, 10L, baseNetworkFriendIds);
 
-    @Test
-    @DisplayName("getNetworkContactsOfTwoHop: Repository에 skeletonIds를 전달하고 결과를 반환한다")
-    void getNetworkContactsOfTwoHop_결과를_그대로_반환한다() {
-        Long userId = 1L, targetId = 10L;
-        List<Long> skeletonIds = List.of(20L, 30L);
-        List<Long> expected = List.of(5L);
-        given(socialNetworkRepository.getNetworkContactsOfTwoHop(userId, targetId, skeletonIds, 5)).willReturn(expected);
-
-        List<Long> result = service.getNetworkContactsOfTwoHop(userId, targetId, skeletonIds);
-
-        verify(socialNetworkRepository).getNetworkContactsOfTwoHop(userId, targetId, skeletonIds, 5);
+        verify(socialNetworkRepository).getTwoHopContactEdgesForTarget(1L, 10L, baseNetworkFriendIds, 5);
         assertThat(result).isEqualTo(expected);
     }
 }
