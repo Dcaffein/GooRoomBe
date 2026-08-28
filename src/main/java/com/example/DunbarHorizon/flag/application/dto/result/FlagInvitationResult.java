@@ -6,21 +6,25 @@ import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitation;
 
 import java.time.LocalDateTime;
 
-public record ReceivedFlagInvitationResult(
+public record FlagInvitationResult(
         Long id,
         Long flagId,
         String flagTitle,
         String flagDescription,
-        String inviterNickname,
+        String counterpartNickname,
         LocalDateTime createdAt
 ) {
-    public static ReceivedFlagInvitationResult of(FlagInvitation invitation, Flag flag, FlagUserInfo inviter) {
-        return new ReceivedFlagInvitationResult(
+    public static FlagInvitationResult of(
+            FlagInvitation invitation,
+            Flag flag,
+            FlagUserInfo counterpart
+    ) {
+        return new FlagInvitationResult(
                 invitation.getId(),
                 invitation.getFlagId(),
                 flag.getTitle(),
                 flag.getDescription(),
-                inviter.nickname(),
+                counterpart.nickname(),
                 invitation.getCreatedAt()
         );
     }

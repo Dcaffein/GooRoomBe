@@ -11,6 +11,10 @@ import com.example.DunbarHorizon.support.BaseControllerTest;
 import com.example.DunbarHorizon.support.WithMockCustomUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -237,50 +241,57 @@ class FlagControllerTest extends BaseControllerTest {
 
     @Test
     @DisplayName("친구 플래그 조회 시 200을 반환하고 getFriendFlags()를 호출한다")
-    void getFriendFlags_Returns200() throws Exception {
-        given(flagQueryUseCase.getFriendFlags(CURRENT_USER_ID)).willReturn(List.of());
+    void getFeedFlags_UsesDefaultPage() throws Exception {
+        Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+        given(flagQueryUseCase.getFeedFlags(CURRENT_USER_ID, pageable))
+                .willReturn(new SliceImpl<>(List.of(), pageable, false));
 
-        mockMvc.perform(get("/api/v1/flags/friends"))
+        mockMvc.perform(get("/api/v1/flags/feed"))
                 .andExpect(status().isOk());
 
-        verify(flagQueryUseCase).getFriendFlags(CURRENT_USER_ID);
+        verify(flagQueryUseCase).getFeedFlags(CURRENT_USER_ID, pageable);
     }
 
     @Test
     @DisplayName("내 플래그 조회(HOST) 시 200을 반환하고 getFlagsByRole()를 호출한다")
-    void getMyFlags_HostRole_Returns200() throws Exception {
-        given(flagQueryUseCase.getFlagsByRole(CURRENT_USER_ID, FlagRole.HOST)).willReturn(List.of());
+    void getMyFlags_PassesCurrentUserRoleAndPage() throws Exception {
+        Pageable pageable = PageRequest.of(2, 5, Sort.by(Sort.Direction.DESC, "createdAt"));
+        given(flagQueryUseCase.getFlagsByRole(CURRENT_USER_ID, FlagRole.HOST, pageable))
+                .willReturn(new SliceImpl<>(List.of(), pageable, false));
 
-        mockMvc.perform(get("/api/v1/flags/me").param("role", "HOST"))
+        mockMvc.perform(get("/api/v1/flags")
+                        .param("role", "HOST")
+                        .param("page", "2")
+                        .param("size", "5"))
                 .andExpect(status().isOk());
 
-        verify(flagQueryUseCase).getFlagsByRole(CURRENT_USER_ID, FlagRole.HOST);
+        verify(flagQueryUseCase).getFlagsByRole(CURRENT_USER_ID, FlagRole.HOST, pageable);
     }
 
     @Test
     @DisplayName("특정 유저 최근 플래그 조회 시 200을 반환하고 getRecentFlags()를 호출한다")
-    void getRecentFlags_Returns200() throws Exception {
+    void getProfileFlags_PassesTargetUserId() throws Exception {
         Long targetUserId = 2L;
-        given(flagQueryUseCase.getRecentFlags(targetUserId)).willReturn(List.of());
+        given(flagQueryUseCase.getProfileFlags(targetUserId)).willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/flags/recent").param("userId", String.valueOf(targetUserId)))
+        mockMvc.perform(get("/api/v1/flags/profile").param("userId", String.valueOf(targetUserId)))
                 .andExpect(status().isOk());
 
-        verify(flagQueryUseCase).getRecentFlags(targetUserId);
+        verify(flagQueryUseCase).getProfileFlags(targetUserId);
     }
 
     @Test
     @DisplayName("특정 유저 플래그 조회(PARTICIPANT) 시 200을 반환하고 getFlagsByRole()를 호출한다")
-    void getUserFlags_ParticipantRole_Returns200() throws Exception {
-        Long targetUserId = 2L;
-        given(flagQueryUseCase.getFlagsByRole(targetUserId, FlagRole.PARTICIPANT)).willReturn(List.of());
+    void getMyFlags_ParticipantRole_UsesDefaultPage() throws Exception {
+        Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+        given(flagQueryUseCase.getFlagsByRole(CURRENT_USER_ID, FlagRole.PARTICIPANT, pageable))
+                .willReturn(new SliceImpl<>(List.of(), pageable, false));
 
         mockMvc.perform(get("/api/v1/flags")
-                        .param("userId", String.valueOf(targetUserId))
                         .param("role", "PARTICIPANT"))
                 .andExpect(status().isOk());
 
-        verify(flagQueryUseCase).getFlagsByRole(targetUserId, FlagRole.PARTICIPANT);
+        verify(flagQueryUseCase).getFlagsByRole(CURRENT_USER_ID, FlagRole.PARTICIPANT, pageable);
     }
 
     @Test
@@ -292,21 +303,12 @@ class FlagControllerTest extends BaseControllerTest {
 
     @Test
     @DisplayName("구 sort=recent 쿼리 형태는 더 이상 매핑되지 않는다")
-    void legacySortRecentParam_Returns400() throws Exception {
-        mockMvc.perform(get("/api/v1/flags")
-                        .param("userId", "2")
-                        .param("sort", "recent"))
+    void invalidPage_Returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/flags/feed").param("page", "-1"))
                 .andExpect(status().isBadRequest());
-    }
 
-    @Test
-    @DisplayName("구 유저 축 조회 URL은 더 이상 매핑되지 않는다")
-    void legacyUserFlagUrls_Return404() throws Exception {
-        mockMvc.perform(get("/api/v1/flags/users/2").param("role", "HOST"))
-                .andExpect(status().isNotFound());
-
-        mockMvc.perform(get("/api/v1/flags/users/2/recent"))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/flags").param("role", "HOST").param("size", "0"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

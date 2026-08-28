@@ -4,6 +4,7 @@ import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagExpiryTarget;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -23,7 +24,11 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
 
     List<Flag> findAllByIdIn(Collection<Long> ids);
 
-    List<Flag> findAllByHostId(Long hostId);
+    Slice<Flag> findAllByHostId(Long hostId, Pageable pageable);
+
+    @Query("SELECT f FROM Flag f " +
+           "WHERE f.id IN (SELECT fp.flagId FROM FlagParticipant fp WHERE fp.participantId = :participantId)")
+    Slice<Flag> findByParticipantId(@Param("participantId") Long participantId, Pageable pageable);
 
     @Query("SELECT f.hostId FROM Flag f WHERE f.id = :id")
     Optional<Long> findHostIdById(@Param("id") Long id);
@@ -44,7 +49,11 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
     int expireByIds(@Param("ids") Collection<Long> ids, @Param("now") LocalDateTime now);
 
     @Query("SELECT f FROM Flag f WHERE f.hostId IN :hostIds AND f.schedule.deadline > :asOf")
-    List<Flag> findByHostIdsAndDeadlineAfter(@Param("hostIds") Collection<Long> hostIds, @Param("asOf") LocalDateTime asOf);
+    Slice<Flag> findByHostIdsAndDeadlineAfter(
+            @Param("hostIds") Collection<Long> hostIds,
+            @Param("asOf") LocalDateTime asOf,
+            Pageable pageable
+    );
 
     // Flag의 @SQLRestriction("deleted_at IS NULL")이 JPQL에 적용되어 찾으려는 소프트 삭제 행을
     // 정확히 걸러내므로 네이티브 쿼리로 우회한다.
@@ -57,7 +66,7 @@ public interface FlagJpaRepository extends JpaRepository<Flag, Long> {
            "WHERE f.hostId = :userId " +
            "OR f.id IN (SELECT fp.flagId FROM FlagParticipant fp WHERE fp.participantId = :userId) " +
            "ORDER BY f.createdAt DESC")
-    List<Flag> findRecentByUserId(@Param("userId") Long userId, Pageable pageable);
+    List<Flag> findByHostIdOrParticipantId(@Param("userId") Long userId, Pageable pageable);
 
     // @SQLRestriction은 벌크 DELETE에도 적용된다. JPQL로 쓰면 지우려는 소프트 삭제 행이
     // 정확히 걸러져 한 건도 지워지지 않으므로 네이티브 쿼리로 우회한다.

@@ -7,6 +7,7 @@ import com.example.DunbarHorizon.flag.domain.invitation.repository.FlagInvitatio
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitation;
 import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationManager;
+import com.example.DunbarHorizon.flag.domain.invitation.FlagInvitationStatus;
 import com.example.DunbarHorizon.flag.domain.invitation.event.FlagInvitationSentEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -75,40 +76,34 @@ class FlagInvitationServiceTest {
     }
 
     @Test
-    @DisplayName("수락 시 Manager에 위임하고 FlagParticipant를 저장한 뒤 초대를 삭제한다")
-    void accept_DelegatesToPolicyAndSavesParticipantAndDeletes() {
+    @DisplayName("ACCEPTED 상태 변경은 참여자를 저장하고 초대를 삭제한다")
+    void updateStatus_Accepted_SavesParticipantAndDeletesInvitation() {
         // given
         FlagParticipant newParticipant = mock(FlagParticipant.class);
-        given(invitationManager.accept(10L, INVITEE_ID)).willReturn(newParticipant);
+        given(invitationManager.updateStatus(10L, INVITEE_ID, FlagInvitationStatus.ACCEPTED))
+                .willReturn(newParticipant);
 
         // when
-        flagInvitationService.accept(10L, INVITEE_ID);
+        flagInvitationService.updateStatus(10L, INVITEE_ID, FlagInvitationStatus.ACCEPTED);
 
         // then
-        verify(invitationManager).accept(10L, INVITEE_ID);
+        verify(invitationManager).updateStatus(10L, INVITEE_ID, FlagInvitationStatus.ACCEPTED);
         verify(flagRepository).saveParticipant(newParticipant);
         verify(invitationRepository).deleteById(10L);
     }
 
     @Test
-    @DisplayName("거절 시 Manager에 위임하고 초대를 삭제한다")
-    void reject_DelegatesToPolicyAndDeletes() {
+    @DisplayName("삭제 시 초대 모델에 요청자 판단을 위임하고 초대를 삭제한다")
+    void delete_DelegatesToInvitationAndDeletes() {
+        // given
+        FlagInvitation invitation = mock(FlagInvitation.class);
+        given(invitationRepository.findById(10L)).willReturn(Optional.of(invitation));
+
         // when
-        flagInvitationService.reject(10L, INVITEE_ID);
+        flagInvitationService.delete(10L, INVITER_ID);
 
         // then
-        verify(invitationManager).reject(10L, INVITEE_ID);
-        verify(invitationRepository).deleteById(10L);
-    }
-
-    @Test
-    @DisplayName("취소 시 Manager에 위임하고 초대를 삭제한다")
-    void cancel_DelegatesToManagerAndDeletes() {
-        // when
-        flagInvitationService.cancel(10L, INVITER_ID);
-
-        // then
-        verify(invitationManager).cancel(10L, INVITER_ID);
+        verify(invitation).delete(INVITER_ID);
         verify(invitationRepository).deleteById(10L);
     }
 }

@@ -16,6 +16,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -45,6 +49,7 @@ class FlagQueryServiceTest {
 
     private static final Long HOST_ID = 1L;
     private static final LocalDateTime NOW = LocalDateTime.now();
+    private static final Pageable PAGEABLE = PageRequest.of(0, 20);
 
     private Flag createRecruitingFlag(Long id) {
         FlagSchedule schedule = FlagSchedule.of(NOW.plusHours(2), NOW.plusHours(3), NOW.plusHours(4));
@@ -67,28 +72,29 @@ class FlagQueryServiceTest {
 
     @Test
     @DisplayName("최근 Flag 조회 시 host + 참여 Flag 합산 결과가 반환된다")
-    void getRecentFlags_ReturnsCombinedFlags() {
+    void getProfileFlags_ReturnsCombinedFlags() {
         Long participantUserId = 2L;
         Flag hostedFlag = createRecruitingFlag(1L);
         Flag participatedFlag = createRecruitingFlag(2L);
         ReflectionTestUtils.setField(participatedFlag, "hostId", participantUserId);
 
-        given(flagRepository.findRecentByUserId(HOST_ID, 5)).willReturn(List.of(hostedFlag, participatedFlag));
+        given(flagRepository.findByHostIdOrParticipantId(HOST_ID, 5))
+                .willReturn(List.of(hostedFlag, participatedFlag));
         given(flagRepository.countParticipantsByFlagIds(anyCollection())).willReturn(Map.of(1L, 2, 2L, 1));
         given(flagUserPort.findUserInfosByIds(anySet()))
                 .willReturn(Map.of(HOST_ID, userInfo(HOST_ID), participantUserId, userInfo(participantUserId)));
 
-        List<FlagResult> result = flagQueryService.getRecentFlags(HOST_ID);
+        List<FlagResult> result = flagQueryService.getProfileFlags(HOST_ID);
 
         assertThat(result).hasSize(2);
     }
 
     @Test
     @DisplayName("최근 Flag가 없으면 빈 리스트가 반환된다")
-    void getRecentFlags_NoFlags_ReturnsEmpty() {
-        given(flagRepository.findRecentByUserId(HOST_ID, 5)).willReturn(List.of());
+    void getProfileFlags_NoFlags_ReturnsEmpty() {
+        given(flagRepository.findByHostIdOrParticipantId(HOST_ID, 5)).willReturn(List.of());
 
-        List<FlagResult> result = flagQueryService.getRecentFlags(HOST_ID);
+        List<FlagResult> result = flagQueryService.getProfileFlags(HOST_ID);
 
         assertThat(result).isEmpty();
     }
@@ -97,34 +103,37 @@ class FlagQueryServiceTest {
 
     @Test
     @DisplayName("친구 Flag 조회 시 마감이 남은 친구들의 플래그가 반환된다")
-    void getFriendFlags_ReturnsFriendFlagsWithRemainingDeadline() {
+    void getFeedFlags_ReturnsFriendFlagsWithRemainingDeadline() {
         Long friendId = 2L;
         Set<Long> friendIds = Set.of(friendId, 3L);
         Flag friendFlag = createRecruitingFlag(1L);
         ReflectionTestUtils.setField(friendFlag, "hostId", friendId);
 
         given(flagUserPort.getRelatedUserIds(HOST_ID)).willReturn(friendIds);
-        given(flagRepository.findByHostIdsAndDeadlineAfter(eq(friendIds), any(LocalDateTime.class)))
-                .willReturn(List.of(friendFlag));
+        given(flagRepository.findByHostIdsAndDeadlineAfter(eq(friendIds), any(LocalDateTime.class), eq(PAGEABLE)))
+                .willReturn(new SliceImpl<>(List.of(friendFlag), PAGEABLE, true));
         given(flagRepository.countParticipantsByFlagIds(anyCollection())).willReturn(Map.of(1L, 4));
         // 친구 전원이 아니라 실제 호스트만 조회한다
         given(flagUserPort.findUserInfosByIds(Set.of(friendId))).willReturn(Map.of(friendId, userInfo(friendId)));
 
-        List<FlagResult> result = flagQueryService.getFriendFlags(HOST_ID);
+        Slice<FlagResult> result = flagQueryService.getFeedFlags(HOST_ID, PAGEABLE);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).participantCount()).isEqualTo(4);
+        assertThat(result.getContent().get(0).participantCount()).isEqualTo(4);
+        assertThat(result.hasNext()).isTrue();
     }
 
     @Test
     @DisplayName("친구가 없으면 조회 쿼리를 실행하지 않고 빈 리스트가 반환된다")
-    void getFriendFlags_NoFriends_ReturnsEmptyWithoutQuery() {
+    void getFeedFlags_NoFriends_ReturnsEmptyWithoutQuery() {
         given(flagUserPort.getRelatedUserIds(HOST_ID)).willReturn(Set.of());
 
-        List<FlagResult> result = flagQueryService.getFriendFlags(HOST_ID);
+        Slice<FlagResult> result = flagQueryService.getFeedFlags(HOST_ID, PAGEABLE);
 
         assertThat(result).isEmpty();
-        verify(flagRepository, never()).findByHostIdsAndDeadlineAfter(anySet(), any(LocalDateTime.class));
+        assertThat(result.getPageable()).isEqualTo(PAGEABLE);
+        verify(flagRepository, never())
+                .findByHostIdsAndDeadlineAfter(anySet(), any(LocalDateTime.class), any(Pageable.class));
     }
 
     // ===== 목록 조회 =====
@@ -133,38 +142,40 @@ class FlagQueryServiceTest {
     @DisplayName("HOST 역할로 조회하면 호스팅 중인 플래그 목록이 반환된다")
     void getFlagsByRole_Host_ReturnsManagedFlags() {
         Flag flag = createRecruitingFlag(1L);
-        given(flagRepository.findAllByHostId(HOST_ID)).willReturn(List.of(flag));
+        given(flagRepository.findAllByHostId(HOST_ID, PAGEABLE))
+                .willReturn(new SliceImpl<>(List.of(flag), PAGEABLE, false));
         given(flagRepository.countParticipantsByFlagIds(anyCollection())).willReturn(Map.of(1L, 3));
         given(flagUserPort.findUserInfosByIds(Set.of(HOST_ID))).willReturn(Map.of(HOST_ID, userInfo(HOST_ID)));
 
-        List<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.HOST);
+        Slice<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.HOST, PAGEABLE);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).title()).isEqualTo("테스트 플래그");
-        assertThat(result.get(0).participantCount()).isEqualTo(3);
+        assertThat(result.getContent().get(0).title()).isEqualTo("테스트 플래그");
+        assertThat(result.getContent().get(0).participantCount()).isEqualTo(3);
     }
 
     @Test
     @DisplayName("PARTICIPANT 역할로 조회하면 참여 중인 플래그 목록이 반환된다")
     void getFlagsByRole_Participant_ReturnsParticipatingFlags() {
         Flag flag = createRecruitingFlag(1L);
-        given(flagRepository.findFlagIdsByParticipantId(HOST_ID)).willReturn(List.of(1L));
-        given(flagRepository.findAllByIdIn(List.of(1L))).willReturn(List.of(flag));
+        given(flagRepository.findByParticipantId(HOST_ID, PAGEABLE))
+                .willReturn(new SliceImpl<>(List.of(flag), PAGEABLE, false));
         given(flagRepository.countParticipantsByFlagIds(anyCollection())).willReturn(Map.of(1L, 1));
         given(flagUserPort.findUserInfosByIds(anySet())).willReturn(Map.of(HOST_ID, userInfo(HOST_ID)));
 
-        List<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.PARTICIPANT);
+        Slice<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.PARTICIPANT, PAGEABLE);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).participantCount()).isEqualTo(1);
+        assertThat(result.getContent().get(0).participantCount()).isEqualTo(1);
     }
 
     @Test
     @DisplayName("참여 플래그가 없으면 빈 리스트가 반환된다")
     void getFlagsByRole_ParticipantNoFlags_ReturnsEmpty() {
-        given(flagRepository.findFlagIdsByParticipantId(HOST_ID)).willReturn(List.of());
+        given(flagRepository.findByParticipantId(HOST_ID, PAGEABLE))
+                .willReturn(new SliceImpl<>(List.of(), PAGEABLE, false));
 
-        List<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.PARTICIPANT);
+        Slice<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.PARTICIPANT, PAGEABLE);
 
         assertThat(result).isEmpty();
     }
@@ -173,13 +184,14 @@ class FlagQueryServiceTest {
     @DisplayName("참여자가 없는 플래그는 participantCount가 0이다")
     void getFlagsByRole_NoParticipants_CountIsZero() {
         Flag flag = createRecruitingFlag(1L);
-        given(flagRepository.findAllByHostId(HOST_ID)).willReturn(List.of(flag));
+        given(flagRepository.findAllByHostId(HOST_ID, PAGEABLE))
+                .willReturn(new SliceImpl<>(List.of(flag), PAGEABLE, false));
         given(flagRepository.countParticipantsByFlagIds(anyCollection())).willReturn(Map.of());
         given(flagUserPort.findUserInfosByIds(anySet())).willReturn(Map.of(HOST_ID, userInfo(HOST_ID)));
 
-        List<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.HOST);
+        Slice<FlagResult> result = flagQueryService.getFlagsByRole(HOST_ID, FlagRole.HOST, PAGEABLE);
 
-        assertThat(result.get(0).participantCount()).isEqualTo(0);
+        assertThat(result.getContent().get(0).participantCount()).isEqualTo(0);
     }
 
     // ===== 상세 조회 =====

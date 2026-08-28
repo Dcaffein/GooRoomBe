@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.flag.domain.invitation;
 
 import com.example.DunbarHorizon.flag.domain.invitation.exception.FlagInvitationAccessException;
+import com.example.DunbarHorizon.flag.domain.invitation.exception.FlagInvitationInvalidException;
 import com.example.DunbarHorizon.global.common.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -30,23 +31,38 @@ public class FlagInvitation extends BaseTimeEntity {
         return new FlagInvitation(flagId, inviterId, inviteeId);
     }
 
-    public void accept(Long requesterId) {
-        validateInvitee(requesterId);
-    }
-
-    public void reject(Long requesterId) {
-        validateInvitee(requesterId);
-    }
-
-    public void cancel(Long requesterId) {
-        if (!inviterId.equals(requesterId)) {
-            throw new FlagInvitationAccessException("초대를 보낸 본인만 취소할 수 있습니다.");
+    public void updateStatus(Long requesterId, FlagInvitationStatus status) {
+        if (status != FlagInvitationStatus.ACCEPTED) {
+            throw new FlagInvitationInvalidException("초대 상태는 ACCEPTED로만 변경할 수 있습니다.");
         }
+        validateInvitee(requesterId);
+    }
+
+    public void delete(Long requesterId) {
+        if (inviteeId.equals(requesterId)) {
+            reject(requesterId);
+            return;
+        }
+        cancel(requesterId);
+    }
+
+    private void reject(Long requesterId) {
+        validateInvitee(requesterId);
+    }
+
+    private void cancel(Long requesterId) {
+        validateInviter(requesterId);
     }
 
     private void validateInvitee(Long requesterId) {
         if (!inviteeId.equals(requesterId)) {
             throw new FlagInvitationAccessException("초대받은 본인만 응답할 수 있습니다.");
+        }
+    }
+
+    private void validateInviter(Long requesterId) {
+        if (!inviterId.equals(requesterId)) {
+            throw new FlagInvitationAccessException("초대를 보낸 본인만 취소할 수 있습니다.");
         }
     }
 

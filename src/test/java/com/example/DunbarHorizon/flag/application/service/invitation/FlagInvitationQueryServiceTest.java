@@ -1,8 +1,8 @@
 package com.example.DunbarHorizon.flag.application.service.invitation;
 
 import com.example.DunbarHorizon.flag.application.dto.info.FlagUserInfo;
-import com.example.DunbarHorizon.flag.application.dto.result.ReceivedFlagInvitationResult;
-import com.example.DunbarHorizon.flag.application.dto.result.SentFlagInvitationResult;
+import com.example.DunbarHorizon.flag.application.dto.FlagInvitationDirection;
+import com.example.DunbarHorizon.flag.application.dto.result.FlagInvitationResult;
 import com.example.DunbarHorizon.flag.application.port.out.FlagUserPort;
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagSchedule;
@@ -83,7 +83,7 @@ class FlagInvitationQueryServiceTest {
     }
 
     @Test
-    @DisplayName("받은 초대 목록을 flagTitle, inviterNickname 포함하여 반환한다")
+    @DisplayName("받은 초대 목록을 flagTitle, counterpartNickname과 함께 반환한다")
     void getReceived_ReturnsMappedResults() {
         // given
         FlagInvitation invitation = buildInvitation(1L);
@@ -95,20 +95,22 @@ class FlagInvitationQueryServiceTest {
         given(flagUserPort.findUserInfosByIds(Set.of(INVITER_ID))).willReturn(Map.of(INVITER_ID, inviterInfo));
 
         // when
-        List<ReceivedFlagInvitationResult> results = queryService.getReceived(INVITEE_ID);
+        List<FlagInvitationResult> results = queryService.getInvitations(
+                INVITEE_ID, FlagInvitationDirection.RECEIVED
+        );
 
         // then
         assertThat(results).hasSize(1);
-        ReceivedFlagInvitationResult result = results.get(0);
+        FlagInvitationResult result = results.get(0);
         assertThat(result.id()).isEqualTo(1L);
         assertThat(result.flagId()).isEqualTo(FLAG_ID);
         assertThat(result.flagTitle()).isEqualTo("플래그 제목");
         assertThat(result.flagDescription()).isEqualTo("플래그 설명");
-        assertThat(result.inviterNickname()).isEqualTo("초대자닉네임");
+        assertThat(result.counterpartNickname()).isEqualTo("초대자닉네임");
     }
 
     @Test
-    @DisplayName("보낸 초대 목록을 flagTitle, inviteeNickname 포함하여 반환한다")
+    @DisplayName("보낸 초대 목록을 flagTitle, counterpartNickname과 함께 반환한다")
     void getSent_ReturnsMappedResults() {
         // given
         FlagInvitation invitation = buildInvitation(2L);
@@ -120,15 +122,17 @@ class FlagInvitationQueryServiceTest {
         given(flagUserPort.findUserInfosByIds(Set.of(INVITEE_ID))).willReturn(Map.of(INVITEE_ID, inviteeInfo));
 
         // when
-        List<SentFlagInvitationResult> results = queryService.getSent(INVITER_ID);
+        List<FlagInvitationResult> results = queryService.getInvitations(
+                INVITER_ID, FlagInvitationDirection.SENT
+        );
 
         // then
         assertThat(results).hasSize(1);
-        SentFlagInvitationResult result = results.get(0);
+        FlagInvitationResult result = results.get(0);
         assertThat(result.id()).isEqualTo(2L);
         assertThat(result.flagId()).isEqualTo(FLAG_ID);
         assertThat(result.flagTitle()).isEqualTo("플래그 제목");
-        assertThat(result.inviteeNickname()).isEqualTo("수신자닉네임");
+        assertThat(result.counterpartNickname()).isEqualTo("수신자닉네임");
     }
 
     @Test
@@ -136,7 +140,7 @@ class FlagInvitationQueryServiceTest {
     void getReceived_WhenEmpty_ReturnsEmptyList() {
         given(invitationRepository.findByInviteeId(INVITEE_ID)).willReturn(List.of());
 
-        assertThat(queryService.getReceived(INVITEE_ID)).isEmpty();
+        assertThat(queryService.getInvitations(INVITEE_ID, FlagInvitationDirection.RECEIVED)).isEmpty();
     }
 
     @Test
@@ -151,7 +155,9 @@ class FlagInvitationQueryServiceTest {
         given(flagUserPort.findUserInfosByIds(Set.of(INVITER_ID))).willReturn(Map.of(INVITER_ID, inviterInfo));
 
         // when
-        List<ReceivedFlagInvitationResult> results = queryService.getReceived(INVITEE_ID);
+        List<FlagInvitationResult> results = queryService.getInvitations(
+                INVITEE_ID, FlagInvitationDirection.RECEIVED
+        );
 
         // then
         assertThat(results).isEmpty();
@@ -171,7 +177,9 @@ class FlagInvitationQueryServiceTest {
         given(flagUserPort.findUserInfosByIds(Set.of(INVITER_ID))).willReturn(Map.of(INVITER_ID, inviterInfo));
 
         // when
-        List<ReceivedFlagInvitationResult> results = queryService.getReceived(INVITEE_ID);
+        List<FlagInvitationResult> results = queryService.getInvitations(
+                INVITEE_ID, FlagInvitationDirection.RECEIVED
+        );
 
         // then
         assertThat(results).isEmpty();
@@ -191,7 +199,9 @@ class FlagInvitationQueryServiceTest {
         given(flagUserPort.findUserInfosByIds(Set.of(INVITEE_ID))).willReturn(Map.of(INVITEE_ID, inviteeInfo));
 
         // when
-        List<SentFlagInvitationResult> results = queryService.getSent(INVITER_ID);
+        List<FlagInvitationResult> results = queryService.getInvitations(
+                INVITER_ID, FlagInvitationDirection.SENT
+        );
 
         // then
         assertThat(results).isEmpty();
@@ -212,7 +222,9 @@ class FlagInvitationQueryServiceTest {
         given(flagUserPort.findUserInfosByIds(Set.of(INVITER_ID))).willReturn(Map.of(INVITER_ID, inviterInfo));
 
         // when
-        List<ReceivedFlagInvitationResult> results = queryService.getReceived(INVITEE_ID);
+        List<FlagInvitationResult> results = queryService.getInvitations(
+                INVITEE_ID, FlagInvitationDirection.RECEIVED
+        );
 
         // then
         assertThat(results).hasSize(1);
