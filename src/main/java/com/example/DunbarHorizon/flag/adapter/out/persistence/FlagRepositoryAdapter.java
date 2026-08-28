@@ -8,6 +8,9 @@ import com.example.DunbarHorizon.flag.domain.flag.repository.FlagExpiryTarget;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -74,21 +77,30 @@ public class FlagRepositoryAdapter implements FlagRepository {
     }
 
     @Override
-    public List<Flag> findAllByHostId(Long hostId) {
-        return flagJpaRepository.findAllByHostId(hostId);
+    public Slice<Flag> findAllByHostId(Long hostId, Pageable pageable) {
+        return flagJpaRepository.findAllByHostId(hostId, pageable);
     }
 
     @Override
-    public List<Flag> findRecentByUserId(Long userId, int limit) {
-        return flagJpaRepository.findRecentByUserId(userId, PageRequest.of(0, limit));
+    public Slice<Flag> findByParticipantId(Long participantId, Pageable pageable) {
+        return flagJpaRepository.findByParticipantId(participantId, pageable);
     }
 
     @Override
-    public List<Flag> findByHostIdsAndDeadlineAfter(Set<Long> hostIds, LocalDateTime asOf) {
+    public List<Flag> findByHostIdOrParticipantId(Long userId, int limit) {
+        return flagJpaRepository.findByHostIdOrParticipantId(userId, PageRequest.of(0, limit));
+    }
+
+    @Override
+    public Slice<Flag> findByHostIdsAndDeadlineAfter(
+            Set<Long> hostIds,
+            LocalDateTime asOf,
+        Pageable pageable
+    ) {
         if (hostIds == null || hostIds.isEmpty()) {
-            return List.of();
+            return new SliceImpl<>(List.of(), pageable, false);
         }
-        return flagJpaRepository.findByHostIdsAndDeadlineAfter(hostIds, asOf);
+        return flagJpaRepository.findByHostIdsAndDeadlineAfter(hostIds, asOf, pageable);
     }
 
     // ==================== FlagParticipant ====================
@@ -143,11 +155,6 @@ public class FlagRepositoryAdapter implements FlagRepository {
                                 FlagParticipantJpaRepository.FlagParticipantIdProjection::getParticipantId,
                                 Collectors.toList())
                 ));
-    }
-
-    @Override
-    public List<Long> findFlagIdsByParticipantId(Long participantId) {
-        return participantJpaRepository.findFlagIdsByParticipantId(participantId);
     }
 
     @Override

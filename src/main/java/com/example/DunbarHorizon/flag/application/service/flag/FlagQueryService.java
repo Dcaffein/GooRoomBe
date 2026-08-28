@@ -12,6 +12,9 @@ import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
 import com.example.DunbarHorizon.flag.domain.flag.exception.FlagNotFoundException;
 import com.example.DunbarHorizon.flag.domain.flag.repository.FlagRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,44 +30,25 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class FlagQueryService implements FlagQueryUseCase {
 
+    private static final int PROFILE_FLAG_LIMIT = 5;
+
     private final FlagRepository flagRepository;
     private final FlagUserPort flagUserPort;
 
     @Override
-    public List<FlagResult> getFriendFlags(Long userId) {
+    public Slice<FlagResult> getFeedFlags(Long userId, Pageable pageable) {
         Set<Long> friendIds = flagUserPort.getRelatedUserIds(userId);
-        if (friendIds.isEmpty()) return List.of();
+        if (friendIds.isEmpty()) return new SliceImpl<>(List.of(), pageable, false);
 
-        List<Flag> recruitingFlags = flagRepository.findByHostIdsAndDeadlineAfter(friendIds, LocalDateTime.now());
-        if (recruitingFlags.isEmpty()) return List.of();
-
-        Set<Long> hostIds = recruitingFlags.stream().map(Flag::getHostId).collect(Collectors.toSet());
-        Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(hostIds);
-        List<Long> flagIds = recruitingFlags.stream().map(Flag::getId).toList();
-        Map<Long, Integer> countMap = flagRepository.countParticipantsByFlagIds(flagIds);
-
-        return recruitingFlags.stream()
-                .map(flag -> FlagResult.of(flag, hostInfoMap.getOrDefault(flag.getHostId(), null),
-                        countMap.getOrDefault(flag.getId(), 0)))
-                .toList();
+        Slice<Flag> flags = flagRepository.findByHostIdsAndDeadlineAfter(
+                friendIds, LocalDateTime.now(), pageable
+        );
+        return toResultSlice(flags);
     }
 
-
     @Override
-    public List<FlagResult> getRecentFlags(Long userId) {
-        List<Flag> flags = flagRepository.findRecentByUserId(userId, 5);
-        if (flags.isEmpty()) return List.of();
-
-        Set<Long> hostIds = flags.stream().map(Flag::getHostId).collect(Collectors.toSet());
-        Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(hostIds);
-
-        List<Long> flagIds = flags.stream().map(Flag::getId).toList();
-        Map<Long, Integer> countMap = flagRepository.countParticipantsByFlagIds(flagIds);
-
-        return flags.stream()
-                .map(flag -> FlagResult.of(flag, hostInfoMap.get(flag.getHostId()),
-                        countMap.getOrDefault(flag.getId(), 0)))
-                .toList();
+    public List<FlagResult> getProfileFlags(Long userId) {
+        return toResults(flagRepository.findByHostIdOrParticipantId(userId, PROFILE_FLAG_LIMIT));
     }
 
     @Override
@@ -94,32 +78,24 @@ public class FlagQueryService implements FlagQueryUseCase {
     }
 
     @Override
-    public List<FlagResult> getFlagsByRole(Long userId, FlagRole role) {
-        return switch (role) {
-            case HOST -> getHostingFlags(userId);
-            case PARTICIPANT -> getParticipatingFlags(userId);
+    public Slice<FlagResult> getFlagsByRole(Long userId, FlagRole role, Pageable pageable) {
+        Slice<Flag> flags = switch (role) {
+            case HOST -> flagRepository.findAllByHostId(userId, pageable);
+            case PARTICIPANT -> flagRepository.findByParticipantId(userId, pageable);
         };
+        return toResultSlice(flags);
     }
 
-    private List<FlagResult> getHostingFlags(Long userId) {
-        List<Flag> managedFlags = flagRepository.findAllByHostId(userId);
-        FlagUserInfo myInfo = flagUserPort.findUserInfosByIds(Set.of(userId)).get(userId);
-
-        List<Long> flagIds = managedFlags.stream().map(Flag::getId).toList();
-        Map<Long, Integer> countMap = flagRepository.countParticipantsByFlagIds(flagIds);
-
-        return managedFlags.stream()
-                .map(flag -> FlagResult.of(flag, myInfo, countMap.getOrDefault(flag.getId(), 0)))
-                .toList();
+    private Slice<FlagResult> toResultSlice(Slice<Flag> flags) {
+        return new SliceImpl<>(toResults(flags.getContent()), flags.getPageable(), flags.hasNext());
     }
 
-    private List<FlagResult> getParticipatingFlags(Long userId) {
-        List<Long> flagIds = flagRepository.findFlagIdsByParticipantId(userId);
-        if (flagIds.isEmpty()) return List.of();
+    private List<FlagResult> toResults(List<Flag> flags) {
+        if (flags.isEmpty()) return List.of();
 
-        List<Flag> flags = flagRepository.findAllByIdIn(flagIds);
         Set<Long> hostIds = flags.stream().map(Flag::getHostId).collect(Collectors.toSet());
         Map<Long, FlagUserInfo> hostInfoMap = flagUserPort.findUserInfosByIds(hostIds);
+        List<Long> flagIds = flags.stream().map(Flag::getId).toList();
         Map<Long, Integer> countMap = flagRepository.countParticipantsByFlagIds(flagIds);
 
         return flags.stream()

@@ -2,6 +2,8 @@ package com.example.DunbarHorizon.flag.domain.flag.repository;
 
 import com.example.DunbarHorizon.flag.domain.flag.Flag;
 import com.example.DunbarHorizon.flag.domain.flag.FlagParticipant;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -21,9 +23,10 @@ public interface FlagRepository {
     int expireByIds(Collection<Long> ids, LocalDateTime now);
     boolean existsByParentId(Long parentId);
     List<Flag> findAllByIdIn(Collection<Long> ids);
-    List<Flag> findAllByHostId(Long hostId);
-    List<Flag> findByHostIdsAndDeadlineAfter(Set<Long> hostIds, LocalDateTime asOf);
-    List<Flag> findRecentByUserId(Long userId, int limit);
+    Slice<Flag> findAllByHostId(Long hostId, Pageable pageable);
+    Slice<Flag> findByParticipantId(Long participantId, Pageable pageable);
+    Slice<Flag> findByHostIdsAndDeadlineAfter(Set<Long> hostIds, LocalDateTime asOf, Pageable pageable);
+    List<Flag> findByHostIdOrParticipantId(Long userId, int limit);
 
     // FlagParticipant
     FlagParticipant saveParticipant(FlagParticipant participant);
@@ -34,6 +37,5 @@ public interface FlagRepository {
     boolean isParticipating(Long flagId, Long participantId);
     List<Long> findAllParticipantIds(Long flagId);
     Map<Long, List<Long>> findAllParticipantIdsByFlagIds(Collection<Long> flagIds);
-    List<Long> findFlagIdsByParticipantId(Long participantId);
     List<FlagParticipant> findAllParticipants(Long flagId);
 }

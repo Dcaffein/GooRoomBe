@@ -8,9 +8,14 @@ import com.example.DunbarHorizon.flag.application.port.in.command.*;
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.ServletRequestBindingException;
 
 import java.util.List;
 
@@ -129,34 +134,30 @@ public class FlagController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<List<FlagResult>> getMyFlagsByRole(
+    @GetMapping
+    public ResponseEntity<Slice<FlagResult>> getMyFlagsByRole(
             @CurrentUserId Long currentUserId,
-            @RequestParam FlagRole role
-    ) {
-        return ResponseEntity.ok(flagQueryUseCase.getFlagsByRole(currentUserId, role));
+            @RequestParam FlagRole role,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) throws ServletRequestBindingException {
+        return ResponseEntity.ok(flagQueryUseCase.getFlagsByRole(currentUserId, role, pageable(page, size)));
     }
 
-    @GetMapping("/friends")
-    public ResponseEntity<List<FlagResult>> getFriendFlags(
-            @CurrentUserId Long currentUserId
-    ) {
-        return ResponseEntity.ok(flagQueryUseCase.getFriendFlags(currentUserId));
+    @GetMapping("/feed")
+    public ResponseEntity<Slice<FlagResult>> getFeedFlags(
+            @CurrentUserId Long currentUserId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) throws ServletRequestBindingException {
+        return ResponseEntity.ok(flagQueryUseCase.getFeedFlags(currentUserId, pageable(page, size)));
     }
 
-    @GetMapping(params = {"userId", "role"})
-    public ResponseEntity<List<FlagResult>> getUserFlagsByRole(
-            @RequestParam Long userId,
-            @RequestParam FlagRole role
-    ) {
-        return ResponseEntity.ok(flagQueryUseCase.getFlagsByRole(userId, role));
-    }
-
-    @GetMapping("/recent")
-    public ResponseEntity<List<FlagResult>> getRecentFlags(
+    @GetMapping("/profile")
+    public ResponseEntity<List<FlagResult>> getProfileFlags(
             @RequestParam Long userId
     ) {
-        return ResponseEntity.ok(flagQueryUseCase.getRecentFlags(userId));
+        return ResponseEntity.ok(flagQueryUseCase.getProfileFlags(userId));
     }
 
     @GetMapping("/{flagId}")
@@ -165,5 +166,12 @@ public class FlagController {
             @CurrentUserId Long currentUserId
     ) {
         return ResponseEntity.ok(flagQueryUseCase.getFlagDetail(flagId, currentUserId));
+    }
+
+    private Pageable pageable(int page, int size) throws ServletRequestBindingException {
+        if (page < 0 || size < 1) {
+            throw new ServletRequestBindingException("page는 0 이상, size는 1 이상이어야 합니다.");
+        }
+        return PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
     }
 }
