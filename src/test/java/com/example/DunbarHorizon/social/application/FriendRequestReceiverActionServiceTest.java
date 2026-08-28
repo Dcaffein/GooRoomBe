@@ -49,8 +49,9 @@ class FriendRequestReceiverActionServiceTest {
     @DisplayName("수신자가 요청을 수락하면 Friendship이 저장되고 요청은 삭제되며 이벤트가 발행된다")
     void acceptFriendRequest_Success() {
         // given
-        String requestId = "uuid-v7-id";
+        Long counterpartId = 1L;
         Long receiverId = 2L;
+        String requestId = FriendRequest.generateId(receiverId, counterpartId);
         SocialUser requester = mock(SocialUser.class);
         SocialUser receiver = mock(SocialUser.class);
         given(requester.getId()).willReturn(1L);
@@ -64,7 +65,7 @@ class FriendRequestReceiverActionServiceTest {
         given(friendshipBroker.createFrom(request)).willReturn(mockFriendship);
 
         // when
-        receiverService.acceptRequest(requestId, receiverId);
+        receiverService.updateStatus(receiverId, counterpartId, FriendRequestStatus.ACCEPTED);
 
         // then
         verify(friendshipBroker).createFrom(request);
@@ -78,8 +79,9 @@ class FriendRequestReceiverActionServiceTest {
     @DisplayName("숨김 처리된 요청도 수락이 가능하다")
     void acceptFriendRequest_WhenHidden_Success() {
         // given
-        String requestId = "uuid-v7-id";
+        Long counterpartId = 1L;
         Long receiverId = 2L;
+        String requestId = FriendRequest.generateId(receiverId, counterpartId);
         SocialUser requester = mock(SocialUser.class);
         SocialUser receiver = mock(SocialUser.class);
         given(requester.getId()).willReturn(1L);
@@ -87,13 +89,13 @@ class FriendRequestReceiverActionServiceTest {
         given(receiver.getNickname()).willReturn("수신자");
 
         FriendRequest request = FriendTestFactory.createRequest(requester, receiver);
-        request.hide(receiverId);
+        request.updateStatus(receiverId, FriendRequestStatus.HIDDEN);
 
         given(friendRequestRepository.findById(requestId)).willReturn(Optional.of(request));
         given(friendshipBroker.createFrom(request)).willReturn(mock(Friendship.class));
 
         // when
-        receiverService.acceptRequest(requestId, receiverId);
+        receiverService.updateStatus(receiverId, counterpartId, FriendRequestStatus.ACCEPTED);
 
         // then
         assertThat(request.getStatus()).isEqualTo(FriendRequestStatus.ACCEPTED);
@@ -105,19 +107,45 @@ class FriendRequestReceiverActionServiceTest {
     @DisplayName("수신자가 요청을 숨기면 상태가 HIDDEN으로 변경된다")
     void hideFriendRequest_Success() {
         // given
-        String requestId = "uuid-v7-id";
+        Long counterpartId = 1L;
         Long receiverId = 2L;
+        String requestId = FriendRequest.generateId(receiverId, counterpartId);
+        SocialUser requester = mock(SocialUser.class);
         SocialUser receiver = mock(SocialUser.class);
+        given(requester.getId()).willReturn(counterpartId);
         given(receiver.getId()).willReturn(receiverId);
 
-        FriendRequest request = FriendTestFactory.createRequest(mock(SocialUser.class), receiver);
+        FriendRequest request = FriendTestFactory.createRequest(requester, receiver);
         given(friendRequestRepository.findById(requestId)).willReturn(Optional.of(request));
 
         // when
-        receiverService.hideRequest(requestId, receiverId);
+        receiverService.updateStatus(receiverId, counterpartId, FriendRequestStatus.HIDDEN);
 
         // then
         assertThat(request.getStatus()).isEqualTo(FriendRequestStatus.HIDDEN);
+        verify(friendRequestRepository).updateStatus(request);
+    }
+
+    @Test
+    void undoHideFriendRequest_Success() {
+        // given
+        Long counterpartId = 1L;
+        Long receiverId = 2L;
+        String requestId = FriendRequest.generateId(receiverId, counterpartId);
+        SocialUser requester = mock(SocialUser.class);
+        SocialUser receiver = mock(SocialUser.class);
+        given(requester.getId()).willReturn(counterpartId);
+        given(receiver.getId()).willReturn(receiverId);
+
+        FriendRequest request = FriendTestFactory.createRequest(requester, receiver);
+        request.updateStatus(receiverId, FriendRequestStatus.HIDDEN);
+        given(friendRequestRepository.findById(requestId)).willReturn(Optional.of(request));
+
+        // when
+        receiverService.updateStatus(receiverId, counterpartId, FriendRequestStatus.PENDING);
+
+        // then
+        assertThat(request.getStatus()).isEqualTo(FriendRequestStatus.PENDING);
         verify(friendRequestRepository).updateStatus(request);
     }
 }

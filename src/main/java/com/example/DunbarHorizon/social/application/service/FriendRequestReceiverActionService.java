@@ -4,6 +4,7 @@ import com.example.DunbarHorizon.social.application.port.in.FriendRequestReceive
 import com.example.DunbarHorizon.social.domain.friend.event.FriendRequestAcceptedEvent;
 import com.example.DunbarHorizon.social.domain.friend.event.FriendshipCreatedEvent;
 import com.example.DunbarHorizon.social.domain.friend.exception.FriendRequestNotFoundException;
+import com.example.DunbarHorizon.social.domain.friend.FriendRequestStatus;
 import com.example.DunbarHorizon.social.domain.friend.FriendRequest;
 import com.example.DunbarHorizon.social.domain.friend.Friendship;
 import com.example.DunbarHorizon.social.domain.friend.FriendshipBroker;
@@ -25,10 +26,19 @@ public class FriendRequestReceiverActionService implements FriendRequestReceiver
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
-    public void acceptRequest(String requestId, Long receiverId) {
+    public void updateStatus(Long receiverId, Long counterpartId, FriendRequestStatus status) {
+        String requestId = FriendRequest.generateId(receiverId, counterpartId);
         FriendRequest request = findRequestById(requestId);
-        request.accept(receiverId);
+        request.updateStatus(receiverId, status);
 
+        if (request.isAccepted()) {
+            acceptRequest(request, requestId);
+        } else {
+            friendRequestRepository.updateStatus(request);
+        }
+    }
+
+    private void acceptRequest(FriendRequest request, String requestId) {
         Friendship friendship = friendshipBroker.createFrom(request);
         friendshipRepository.save(friendship);
         friendRequestRepository.deleteById(requestId);
@@ -42,20 +52,6 @@ public class FriendRequestReceiverActionService implements FriendRequestReceiver
                 request.getReceiver().getId(),
                 request.getReceiver().getNickname()
         ));
-    }
-
-    @Override
-    public void hideRequest(String requestId, Long receiverId) {
-        FriendRequest request = findRequestById(requestId);
-        request.hide(receiverId);
-        friendRequestRepository.updateStatus(request);
-    }
-
-    @Override
-    public void undoHideRequest(String requestId, Long receiverId) {
-        FriendRequest request = findRequestById(requestId);
-        request.undoHide(receiverId);
-        friendRequestRepository.updateStatus(request);
     }
 
     private FriendRequest findRequestById(String requestId) {

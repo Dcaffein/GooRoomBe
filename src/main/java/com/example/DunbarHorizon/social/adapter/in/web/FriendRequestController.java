@@ -2,6 +2,7 @@ package com.example.DunbarHorizon.social.adapter.in.web;
 
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
 import com.example.DunbarHorizon.social.adapter.in.web.dto.FriendRequestCreateRequest;
+import com.example.DunbarHorizon.social.adapter.in.web.dto.FriendRequestStatusUpdateRequest;
 import com.example.DunbarHorizon.social.application.dto.result.FriendRequestResult;
 import com.example.DunbarHorizon.social.application.dto.FriendRequestDirection;
 import com.example.DunbarHorizon.social.application.port.in.FriendRequestReceiverActionUseCase;
@@ -45,43 +46,27 @@ public class FriendRequestController {
         FriendRequestResult response = FriendRequestResult.from(newRequest);
 
         return ResponseEntity
-                .created(URI.create("/api/v1/friend-requests/" + newRequest.getId()))
+                .created(URI.create(
+                        "/api/v1/friend-requests/" + newRequest.getReceiver().getId()))
                 .body(response);
     }
 
-    @DeleteMapping("/{requestId}")
+    @DeleteMapping("/{counterpartId}")
     public ResponseEntity<Void> cancelFriendRequest(
             @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
+            @PathVariable Long counterpartId) {
 
-        requesterActionUseCase.cancelRequest(requestId, currentUserId);
+        requesterActionUseCase.cancelRequest(counterpartId, currentUserId);
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/{requestId}/accept")
-    public ResponseEntity<Void> acceptFriendRequest(
+    @PatchMapping("/{counterpartId}")
+    public ResponseEntity<Void> updateFriendRequestStatus(
             @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
+            @PathVariable Long counterpartId,
+            @RequestBody @Valid FriendRequestStatusUpdateRequest request) {
 
-        receiverActionUseCase.acceptRequest(requestId, currentUserId);
-        return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/{requestId}/hide")
-    public ResponseEntity<Void> hideFriendRequest(
-            @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
-
-        receiverActionUseCase.hideRequest(requestId, currentUserId);
-        return ResponseEntity.noContent().build();
-    }
-
-    @DeleteMapping("/{requestId}/hide")
-    public ResponseEntity<Void> undoHideFriendRequest(
-            @CurrentUserId Long currentUserId,
-            @PathVariable String requestId) {
-
-        receiverActionUseCase.undoHideRequest(requestId, currentUserId);
+        receiverActionUseCase.updateStatus(currentUserId, counterpartId, request.status());
         return ResponseEntity.noContent().build();
     }
 }

@@ -108,18 +108,20 @@ class FriendRequestRequesterActionServiceTest {
     @DisplayName("신청자가 자신이 보낸 요청을 취소하면 요청이 물리 삭제된다")
     void cancelFriendRequest_Success() {
         // given
-        String requestId = "uuid-v7-id";
         Long requesterId = 1L;
+        Long counterpartId = 2L;
+        String requestId = FriendRequest.generateId(requesterId, counterpartId);
 
         SocialUser req = mock(SocialUser.class);
         SocialUser res = mock(SocialUser.class);
         given(req.getId()).willReturn(requesterId);
+        given(res.getId()).willReturn(counterpartId);
 
         FriendRequest request = FriendTestFactory.createRequest(req, res);
         given(friendRequestRepository.findById(requestId)).willReturn(Optional.of(request));
 
         // when
-        requesterService.cancelRequest(requestId, requesterId);
+        requesterService.cancelRequest(counterpartId, requesterId);
 
         // then
         verify(friendRequestRepository).deleteById(requestId);

@@ -83,7 +83,7 @@ class FriendRequestQueryServiceTest {
         given(req.getId()).willReturn(1L);
         given(res.getId()).willReturn(userId);
         FriendRequest request = FriendTestFactory.createRequest(req, res);
-        request.hide(userId);
+        request.updateStatus(userId, FriendRequestStatus.HIDDEN);
 
         given(friendRequestRepository.findAllByReceiver_IdAndStatus(userId, FriendRequestStatus.HIDDEN))
                 .willReturn(List.of(request));

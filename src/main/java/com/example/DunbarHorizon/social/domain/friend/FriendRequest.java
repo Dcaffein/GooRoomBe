@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.social.domain.friend;
 
 import com.example.DunbarHorizon.social.domain.friend.exception.CannotRequestToSelfException;
+import com.example.DunbarHorizon.social.domain.friend.exception.FriendRequestInvalidException;
 import com.example.DunbarHorizon.social.domain.socialUser.UserReference;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -49,16 +50,14 @@ public class FriendRequest {
         return min + "_" + max;
     }
 
-    public void accept(Long userId) {
-        this.status = this.status.accept(this, userId);
-    }
+    public void updateStatus(Long userId, FriendRequestStatus targetStatus) {
+        if (targetStatus == null) {
+            throw new FriendRequestInvalidException(
+                    "상태(status)는 필수입니다."
+            );
+        }
 
-    public void hide(Long userId) {
-        this.status = this.status.hide(this, userId);
-    }
-
-    public void undoHide(Long userId) {
-        this.status = this.status.undoHide(this, userId);
+        this.status = targetStatus.update(this, userId);
     }
 
     public void cancel(Long userId) {

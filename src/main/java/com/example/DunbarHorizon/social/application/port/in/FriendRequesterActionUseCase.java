@@ -4,5 +4,5 @@ import com.example.DunbarHorizon.social.domain.friend.FriendRequest;
 
 public interface FriendRequesterActionUseCase {
     FriendRequest sendRequest(Long requesterId, Long receiverId);
-    void cancelRequest(String requestId, Long requesterId);
+    void cancelRequest(Long counterpartId, Long requesterId);
 }
