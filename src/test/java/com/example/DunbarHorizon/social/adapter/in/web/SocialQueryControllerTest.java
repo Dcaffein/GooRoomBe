@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.social.adapter.in.web;
 
 import com.example.DunbarHorizon.social.application.dto.result.AnchorExpansionResult;
+import com.example.DunbarHorizon.social.application.dto.result.ConnectionPathResult;
 import com.example.DunbarHorizon.social.application.dto.result.NodeGraphResult;
 import com.example.DunbarHorizon.social.domain.friend.DunbarCircle;
 import com.example.DunbarHorizon.support.BaseControllerTest;
@@ -51,5 +52,27 @@ class SocialQueryControllerTest extends BaseControllerTest {
                         .param("anchorId", String.valueOf(anchorId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    @DisplayName("연결 중개인 조회는 상위 3명과 전체 수를 내려주고 score는 포함하지 않는다")
+    void getConnectionPath_Success() throws Exception {
+        Long targetId = 99L;
+        given(socialConnectionPathQueryUseCase.getConnectionPath(eq(1L), eq(targetId)))
+                .willReturn(new ConnectionPathResult(false, 12, List.of(
+                        new ConnectionPathResult.IntermediaryResult(2L, "중개인2"),
+                        new ConnectionPathResult.IntermediaryResult(3L, "중개인3"),
+                        new ConnectionPathResult.IntermediaryResult(4L, "중개인4")
+                )));
+
+        mockMvc.perform(get("/api/v1/networks/path")
+                        .param("targetId", String.valueOf(targetId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.direct").value(false))
+                .andExpect(jsonPath("$.totalCount").value(12))
+                .andExpect(jsonPath("$.intermediaries.length()").value(3))
+                .andExpect(jsonPath("$.intermediaries[0].userId").value(2))
+                .andExpect(jsonPath("$.intermediaries[0].nickname").value("중개인2"))
+                .andExpect(jsonPath("$.intermediaries[0].score").doesNotExist());
     }
 }
