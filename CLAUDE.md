@@ -173,9 +173,9 @@ PATCH  /api/v1/buzzes/{buzzId}/replies/{id}    # update reply
 DELETE /api/v1/buzzes/{buzzId}/replies/{id}    # delete reply
 ```
 
-### Trace (`/api/v1/social/traces`)
+### Trace (`/api/v1/traces`)
 ```
-POST  /api/v1/social/traces     # record visit
+POST  /api/v1/traces     # record visit
 ```
 
 ## Key Domain Concepts

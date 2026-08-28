@@ -10,14 +10,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/social")
+@RequestMapping("/api/v1/social/profiles")
 @RequiredArgsConstructor
 public class SocialUserController {
 
     private final SocialUserQueryUseCase socialUserQueryUseCase;
 
-    @GetMapping("/users/{id}")
-    public ResponseEntity<SocialProfileResult> getSocialProfile(@PathVariable Long id) {
-        return ResponseEntity.ok(socialUserQueryUseCase.getSocialProfile(id));
+    @GetMapping("/{userId}")
+    public ResponseEntity<SocialProfileResult> getSocialProfile(@PathVariable Long userId) {
+        return ResponseEntity.ok(socialUserQueryUseCase.getSocialProfile(userId));
     }
 }
