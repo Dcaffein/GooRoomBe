@@ -1,10 +1,12 @@
 package com.example.DunbarHorizon.social.application;
 
 import com.example.DunbarHorizon.social.application.dto.result.FriendRequestResult;
+import com.example.DunbarHorizon.social.application.dto.FriendRequestDirection;
 import com.example.DunbarHorizon.social.application.service.FriendRequestQueryService;
 import com.example.DunbarHorizon.social.domain.friend.FriendRequest;
 import com.example.DunbarHorizon.social.domain.friend.FriendRequestStatus;
 import com.example.DunbarHorizon.social.domain.friend.FriendTestFactory;
+import com.example.DunbarHorizon.social.domain.friend.exception.FriendRequestInvalidException;
 import com.example.DunbarHorizon.social.domain.friend.repository.FriendRequestRepository;
 import com.example.DunbarHorizon.social.domain.socialUser.SocialUser;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +22,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -47,7 +50,8 @@ class FriendRequestQueryServiceTest {
                 .willReturn(List.of(request));
 
         // when
-        List<FriendRequestResult> result = queryService.getReceivedRequests(userId);
+        List<FriendRequestResult> result = queryService.getRequests(
+                userId, FriendRequestDirection.RECEIVED, null);
 
         // then
         assertThat(result).hasSize(1);
@@ -62,7 +66,8 @@ class FriendRequestQueryServiceTest {
                 .willReturn(List.of());
 
         // when
-        List<FriendRequestResult> result = queryService.getReceivedRequests(userId);
+        List<FriendRequestResult> result = queryService.getRequests(
+                userId, FriendRequestDirection.RECEIVED, null);
 
         // then
         assertThat(result).isEmpty();
@@ -84,7 +89,8 @@ class FriendRequestQueryServiceTest {
                 .willReturn(List.of(request));
 
         // when
-        List<FriendRequestResult> result = queryService.getHiddenRequests(userId);
+        List<FriendRequestResult> result = queryService.getRequests(
+                userId, FriendRequestDirection.RECEIVED, FriendRequestStatus.HIDDEN);
 
         // then
         assertThat(result).hasSize(1);
@@ -105,7 +111,8 @@ class FriendRequestQueryServiceTest {
                 .willReturn(List.of(orphanRequest));
 
         // when / then
-        assertThatNoException().isThrownBy(() -> queryService.getReceivedRequests(userId));
+        assertThatNoException().isThrownBy(() -> queryService.getRequests(
+                userId, FriendRequestDirection.RECEIVED, null));
     }
 
     @Test
@@ -123,9 +130,26 @@ class FriendRequestQueryServiceTest {
                 .willReturn(List.of(request));
 
         // when
-        List<FriendRequestResult> result = queryService.getSentRequests(userId);
+        List<FriendRequestResult> result = queryService.getRequests(
+                userId, FriendRequestDirection.SENT, null);
 
         // then
         assertThat(result).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("sent 조회에 status를 사용하면 400 예외가 발생한다")
+    void getRequests_SentWithStatus_ThrowsException() {
+        assertThatThrownBy(() -> queryService.getRequests(
+                1L, FriendRequestDirection.SENT, FriendRequestStatus.HIDDEN))
+                .isInstanceOf(FriendRequestInvalidException.class);
+    }
+
+    @Test
+    @DisplayName("received 조회에 ACCEPTED를 사용하면 400 예외가 발생한다")
+    void getRequests_ReceivedAccepted_ThrowsException() {
+        assertThatThrownBy(() -> queryService.getRequests(
+                1L, FriendRequestDirection.RECEIVED, FriendRequestStatus.ACCEPTED))
+                .isInstanceOf(FriendRequestInvalidException.class);
     }
 }

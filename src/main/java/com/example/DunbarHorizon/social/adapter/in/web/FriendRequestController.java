@@ -3,9 +3,11 @@ package com.example.DunbarHorizon.social.adapter.in.web;
 import com.example.DunbarHorizon.global.annotation.CurrentUserId;
 import com.example.DunbarHorizon.social.adapter.in.web.dto.FriendRequestCreateRequest;
 import com.example.DunbarHorizon.social.application.dto.result.FriendRequestResult;
+import com.example.DunbarHorizon.social.application.dto.FriendRequestDirection;
 import com.example.DunbarHorizon.social.application.port.in.FriendRequestReceiverActionUseCase;
 import com.example.DunbarHorizon.social.application.port.in.FriendRequestQueryUseCase;
 import com.example.DunbarHorizon.social.application.port.in.FriendRequesterActionUseCase;
+import com.example.DunbarHorizon.social.domain.friend.FriendRequestStatus;
 import com.example.DunbarHorizon.social.domain.friend.FriendRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,24 +27,13 @@ public class FriendRequestController {
     private final FriendRequestQueryUseCase queryUseCase;
 
     @GetMapping
-    public ResponseEntity<List<FriendRequestResult>> getReceivedRequests(
-            @CurrentUserId Long currentUserId) {
+    public ResponseEntity<List<FriendRequestResult>> getRequests(
+            @CurrentUserId Long currentUserId,
+            @RequestParam String direction,
+            @RequestParam(required = false) FriendRequestStatus status) {
 
-        return ResponseEntity.ok(queryUseCase.getReceivedRequests(currentUserId));
-    }
-
-    @GetMapping("/hidden")
-    public ResponseEntity<List<FriendRequestResult>> getHiddenRequests(
-            @CurrentUserId Long currentUserId) {
-
-        return ResponseEntity.ok(queryUseCase.getHiddenRequests(currentUserId));
-    }
-
-    @GetMapping("/sent")
-    public ResponseEntity<List<FriendRequestResult>> getSentRequests(
-            @CurrentUserId Long currentUserId) {
-
-        return ResponseEntity.ok(queryUseCase.getSentRequests(currentUserId));
+        return ResponseEntity.ok(queryUseCase.getRequests(
+                currentUserId, FriendRequestDirection.from(direction), status));
     }
 
     @PostMapping

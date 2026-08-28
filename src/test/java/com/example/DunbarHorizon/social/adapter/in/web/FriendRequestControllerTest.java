@@ -1,6 +1,7 @@
 package com.example.DunbarHorizon.social.adapter.in.web;
 
 import com.example.DunbarHorizon.social.adapter.in.web.dto.FriendRequestCreateRequest;
+import com.example.DunbarHorizon.social.application.dto.FriendRequestDirection;
 import com.example.DunbarHorizon.social.domain.friend.FriendRequest;
 import com.example.DunbarHorizon.social.domain.friend.FriendRequestStatus;
 import com.example.DunbarHorizon.social.domain.socialUser.SocialUser;
@@ -13,6 +14,7 @@ import org.springframework.http.MediaType;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -97,9 +99,24 @@ class FriendRequestControllerTest extends BaseControllerTest {
     @Test
     @DisplayName("숨김 처리된 친구 요청 목록을 조회한다")
     void getHiddenRequests_Success() throws Exception {
-        given(friendRequestQueryUseCase.getHiddenRequests(eq(1L))).willReturn(List.of());
+        given(friendRequestQueryUseCase.getRequests(eq(1L), eq(FriendRequestDirection.RECEIVED),
+                eq(FriendRequestStatus.HIDDEN))).willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/friend-requests/hidden"))
+        mockMvc.perform(get("/api/v1/friend-requests")
+                        .param("direction", "received")
+                        .param("status", "HIDDEN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    @DisplayName("received 조회에서 status를 생략하면 PENDING으로 조회한다")
+    void getReceivedRequests_DefaultStatus() throws Exception {
+        given(friendRequestQueryUseCase.getRequests(eq(1L), eq(FriendRequestDirection.RECEIVED), isNull()))
+                .willReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/friend-requests")
+                        .param("direction", "received"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
     }
@@ -107,10 +124,19 @@ class FriendRequestControllerTest extends BaseControllerTest {
     @Test
     @DisplayName("내가 보낸 친구 요청 목록을 조회한다")
     void getSentRequests_Success() throws Exception {
-        given(friendRequestQueryUseCase.getSentRequests(eq(1L))).willReturn(List.of());
+        given(friendRequestQueryUseCase.getRequests(eq(1L), eq(FriendRequestDirection.SENT), isNull()))
+                .willReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/friend-requests/sent"))
+        mockMvc.perform(get("/api/v1/friend-requests")
+                        .param("direction", "sent"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    @DisplayName("조회 direction이 없으면 400을 반환한다")
+    void getRequests_WithoutDirection_BadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/friend-requests"))
+                .andExpect(status().isBadRequest());
     }
 }
