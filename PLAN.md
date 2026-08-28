@@ -1,154 +1,109 @@
-# PLAN — 플래그 종료 이벤트 정리 (task-103) 구현 방법
+# PLAN — 연결 중개인 범위 축소 (task-105) 구현 방법
 
-브랜치: `ai/fix-flag-conclusion-events` (main에서 분기), 커밋 6개
+브랜치: `ai/feat-connection-path-scope` (main에서 분기), 커밋 1개
 
----
+## 현황
 
-## 커밋 1 — 삭제 알림 대상
+| 위치 | 현재 |
+|---|---|
+| `SocialConnectionPathRepositoryAdapter:24-38` | Cypher에 `LIMIT` 없음. `mid`별 한 행씩 전부 반환 |
+| `:51` | `.all()` |
+| `ConnectionPathResult` | `(direct, intermediaries)`, `IntermediaryResult(userId, nickname, score)` |
+| `SocialConnectionPathQueryService` | 상수 없음. 리포지토리 결과를 그대로 통과시킨다 |
+| 테스트 | 0건. `BaseControllerTest:81`의 목 선언이 전부 |
 
-`FlagDeletionEventListener`의 비교 대상 하나만 바꾼다.
+`score` 소비처는 어댑터와 DTO뿐이고 `/path`에는 `@Cacheable`이 없다.
 
-```java
-- event.statusAtDeletion() != FlagStatus.RECRUITING
-+ event.statusAtDeletion() != FlagStatus.ENDED
-```
+## 변경 파일
 
-**테스트:** 이 클래스는 알림 발행을 한 건도 검증하지 않고 있었다. 네 상태 케이스를 새로 짠다.
-
-## 커밋 2 — 일정 변경 이벤트 유실
-
-`FlagModificationService.reschedule`에 `save()`를 넣는다. Spring Data의 `@DomainEvents`는
-리포지토리의 `save`/`delete` 호출에서만 발행되고 더티 체킹 플러시로는 발행되지 않는다.
-
-`registerEvent` 등록 지점 셋을 호출부의 `save()` 여부와 대조했다. `closeFlag`와
-`FlagHostService.encoreFlag`는 정상이고 `reschedule`만 빠져 있었다.
-
-**테스트:** 목 리포지토리는 `save()`를 불러도 도메인 이벤트를 발행하지 않는다. 발행 유실은
-컨텍스트를 띄워야 잡히므로 `FlagRescheduleEventIntegrationTest`를 만든다.
-`@TestConfiguration`으로 이벤트를 받아 적는 `@EventListener` 빈을 두고 발행 자체를 본다.
-
-## 커밋 3 — 종료 사실을 한 곳으로
+### 1. `ConnectionPathResult.java` (dto/result)
 
 ```java
-public record FlagConcludedEvent(Long flagId, Long hostId, Long parentId, List<Long> participantIds) {
-    public FlagConcludedEvent {
-        if (participantIds == null || participantIds.isEmpty()) throw new IllegalArgumentException(...);
-    }
-    public boolean isEncore() { return parentId != null; }
+public record ConnectionPathResult(
+        boolean direct,
+        int totalCount,
+        List<IntermediaryResult> intermediaries
+) {
+    public record IntermediaryResult(Long userId, String nickname) {}
+
+    /** 리포지토리가 상한 적용 목록과 전체 수를 함께 반환하기 위한 타입 */
+    public record Intermediaries(List<IntermediaryResult> items, int totalCount) {}
 }
 ```
 
-`FlagConclusionEventListener`가 `isEncore()`로 `InteractionType`을 고르고
-`BatchMutualInteractionEvent`로 넘긴다. **리포지토리 의존이 없다.**
-`@Transactional(REQUIRES_NEW)`는 DB 접근 때문이 아니라, 여기서 발행하는 이벤트를 받는 쪽이
-`@TransactionalEventListener(AFTER_COMMIT)`이라 트랜잭션이 없으면 전달되지 않아서다.
+필드 선언 순서가 JSON 순서다. `Intermediaries`는 `/path` 응답 조립에만 쓰이고
+포트 아웃이 이미 `ConnectionPathResult.IntermediaryResult`를 반환하고 있어 같은 자리에 중첩한다.
 
-`FlagDeletionEventListener`는 `isEmpty()` 검사를 앞으로 빼고 두 분기를 `if/else`로 묶는다.
-`isMeetingHeld`, `publishInteractionEvents`, `InteractionType` import를 제거한다.
+### 2. `SocialConnectionPathRepository.java` (port out)
 
 ```java
-if (event.statusAtDeletion() == FlagStatus.ENDED) {
-    eventPublisher.publishEvent(new FlagConcludedEvent(..., participantIds));
-} else {
-    notifyFlagCancel(participantIds, event.flagTitle());
-}
+ConnectionPathResult.Intermediaries findIntermediaries(Long myId, Long targetId, int limit);
 ```
 
-## 커밋 4 — 자동 만료와 면제 획득 경로
+`SocialNetworkRepository.getNetworkContactsOfTwoHop(..., int strangerQuota)`과 같은 형태로
+상한을 파라미터로 받는다.
 
-### 4-1. 리포지토리
+### 3. `SocialConnectionPathRepositoryAdapter.java`
 
-`expireAllExceedingThreshold` 하나를 둘로 나눈다. **조회 조건은 기존 UPDATE의 WHERE와 같다.**
-`@SQLRestriction`이 `deleted_at IS NULL`을 붙이므로 명시할 것은 둘뿐이다.
+MATCH·WHERE·`score` 계산은 그대로 두고 마지막 `RETURN` 한 줄을 두 줄로 바꾼다.
+
+```cypher
+WITH mid, sqrt(f1.#{INTIMACY} * f2.#{INTIMACY}) AS score
+ORDER BY score DESC
+WITH collect({userId: mid.#{ID}, nickname: mid.#{NICK}}) AS ranked
+RETURN ranked[0..$limit] AS intermediaries, size(ranked) AS totalCount
+```
+
+- `ORDER BY`가 `collect` 앞이라 정렬 순서 그대로 리스트에 담긴다
+- `size(ranked)`는 자르기 전에 센다. 쿼리는 한 번으로 끝난다
+- `score`는 `collect` 맵에 넣지 않는다
+- 변수명을 `all`로 쓰지 않는다. Cypher 내장 술어 `all()`과 겹친다
+
+매핑은 행 하나를 받는 형태로 바뀐다.
 
 ```java
-@Query("SELECT f.id AS id, f.hostId AS hostId, f.parentId AS parentId FROM Flag f " +
-       "WHERE f.schedule.endDateTime < :threshold AND f.autoExpiryExempt = false " +
-       "ORDER BY f.schedule.endDateTime ASC")
-List<FlagExpiryTarget> findExpiryTargets(LocalDateTime threshold, Pageable pageable);
-
-@Modifying(clearAutomatically = true)
-@Query("UPDATE Flag f SET f.deletedAt = :now WHERE f.id IN :ids AND f.deletedAt IS NULL")
-int expireByIds(Collection<Long> ids, LocalDateTime now);
+.mappedBy((ts, r) -> new ConnectionPathResult.Intermediaries(
+        r.get("intermediaries").asList(v -> new ConnectionPathResult.IntermediaryResult(
+                v.get("userId").asLong(), v.get("nickname").asString())),
+        r.get("totalCount").asInt()))
+.one().orElse(new ConnectionPathResult.Intermediaries(List.of(), 0));
 ```
 
-엔티티 대신 프로젝션으로 세 필드만 읽는다. 곧 같은 행을 벌크 UPDATE하므로 영속성
-컨텍스트에 올리지 않는 편이 낫고, 이벤트가 `hostId`·`parentId`를 실어야 하는데 소프트 삭제
-후에는 되읽을 수 없다.
+`collect`는 그룹핑 키 없는 집계라 매치가 0건이어도 빈 리스트를 담은 행 하나가 나오지만
+`.orElse`로 받아둔다.
 
-참여자 묶음 조회를 추가한다. 단건 조회는 참여자 id만 돌려주므로 어느 플래그의 것인지 알 수
-없어 묶음에 못 쓴다. `(flagId, participantId)` 쌍을 프로젝션으로 받아 어댑터에서 그룹핑한다.
-`V3__add_flag_indexes.sql`의 `(flag_id, participant_id)`가 커버한다.
-
-어댑터에서 `ids.isEmpty()`면 쿼리를 보내지 않는다. 빈 `IN ()`은 DB에 따라 문법 오류다.
-
-### 4-2. 스윕
+### 4. `SocialConnectionPathQueryService.java`
 
 ```java
-List<FlagExpiryTarget> targets = flagRepository.findExpiryTargets(threshold, BATCH_SIZE);
-List<Long> targetIds = targets.stream().map(FlagExpiryTarget::getId).toList();
-Map<Long, List<Long>> participantsByFlagId = flagRepository.findAllParticipantIdsByFlagIds(targetIds);
-int expiredFlags = flagRepository.expireByIds(targetIds, now);
-targets.forEach(target -> publishConclusion(target, participantsByFlagId));
+private static final int INTERMEDIARY_LIMIT = 3;
 ```
 
-**대상이 몇 건이든 조회는 2회다.** 초대 정리가 소프트 삭제보다 먼저인 순서는 유지한다.
-`BATCH_SIZE = 5000`을 두고, 참여자가 없는 플래그는 소프트 삭제만 하고 발행하지 않는다.
+`SocialNetworkQueryService.STRANGER_QUOTA`, `SocialExpansionQueryService.REC_MAX_LIMIT`과 같은 자리다.
+`direct` 여부와 무관하게 2-hop을 도는 현재 흐름은 유지하고, 자기 자신 대상이면
+`new ConnectionPathResult(false, 0, List.of())`.
 
-### 4-3. 면제 획득
+## 테스트
 
-```java
-// Flag — 자기 상태 사실만 발행한다
-void updateAutoExpiryExempt(boolean value) {
-    if (value && !this.autoExpiryExempt) {
-        registerEvent(new FlagExpiryExemptedEvent(this.id, this.hostId, this.parentId));
-    }
-    this.autoExpiryExempt = value;
-}
+| 파일 | 상태 | 검증 |
+|---|---|---|
+| `social/adapter/out/SocialConnectionPathRepositoryAdapterTest` | 신규 | 상한·정렬·집계·프라이버시 |
+| `social/application/service/SocialConnectionPathQueryServiceTest` | 신규 | `direct = true`에서도 2-hop 실행, 자기 자신, 상수 전달 |
+| `social/adapter/in/web/SocialQueryControllerTest` | 추가 | 응답 본문에 `score` 없음, `totalCount` 있음 |
+
+리포지토리 테스트는 `SocialExpansionRepositoryAdapterTest`와 같이 `@Neo4jRepositoryTest` +
+`@Import(어댑터)`로 짠다. 픽스처는 나(1)-중개인 5명-타겟(99), 중개인마다 intimacy를 달리 줘
+순서를 만들고 한 명은 `r4.isRoutable = false`로 둔다.
+
+- 공통 친구 3명 이하 → 전부 반환, `totalCount`가 그 수와 같다
+- 공통 친구 5명 → `items` 3개, `totalCount` 5
+- `items`가 score 내림차순 상위 3명이다
+- `isRoutable = false`인 중개인 제외
+- 공통 친구 없음 → 빈 리스트, `totalCount` 0
+
+실행: `./gradlew test --tests '*ConnectionPath*' --tests '*SocialQueryControllerTest'`
+
+## 커밋
+
 ```
-
-`FlagExpiryExemptionEventListener`가 참여자를 조회해 `FlagConcludedEvent`로 번역한다.
-
-`FlagExpiryExemptionPolicy`는 `Updater`로 개명하고 `Flag`를 반환한다. 호출부 셋
-(`FlagMemorialEventListener` 생성·삭제, `FlagEncoreEventListener`, `FlagDeletionEventListener`)이
-`flagRepository.save(...)`로 저장한다.
-
-**호출부 셋이 `BEFORE_COMMIT` 리스너다.** 그 단계에서 `save()`가 도메인 이벤트를 실제로
-발행하는지는 단위 테스트로 확인되지 않으므로 `FlagConclusionEventIntegrationTest`로 본다.
-
-### 4-4. 테스트
-
-- `FlagJpaRepositoryTest` — 새 프로젝션 쿼리를 실제 DB에서 검증(종료·면제·삭제 필터,
-  `hostId`/`parentId` 채움, 상한, `expireByIds`). 기존 만료 쿼리에는 DB 레벨 테스트가 없었다
-- `FlagParticipantJpaRepositoryTest` — `flag_id`별 그룹핑, 참여자 없는 플래그는 키 자체가 없음
-- `FlagMemorialFactoryTest`(신규) / `FlagEncoreFactoryTest` — `isEnded()` 가드 고정
-- **통합 테스트는 `@SpringBootTest`가 같은 Testcontainers MySQL에 커밋한다.** JPA 테스트가
-  `containsExactly`로 단정하면 남의 행에 깨지므로 `contains` + `doesNotContain`으로 쓴다
-
-## 커밋 5 — 주석
-
-코드만 봐서는 알 수 없고 모르면 잘못 고치게 되는 것만 남긴다. 되돌리기 쉬운 자리(조회를
-없애고 벌크 UPDATE로 합치기, 조건을 복사해 두 번 쓰기), 판단이 일어나는 자리
-(`InteractionType` 선택, 면제→종료 번역), 감수한 지점(면제 재점화 시 재발행).
-
-## 커밋 6 — `save()` 명시
-
-flag 도메인에서 변경만 하고 저장을 안 부르던 여섯 곳을 채운다.
-
-`FlagModificationService`의 `modifyFlagDetails`·`modifyFlagCapacity`·`closeRecruitment`,
-`FlagCommentCommandService.updateComment`, `FlagMemorialCommandService.updateMemorial`,
-`FlagInvitationCommandService.updateInvitePermission`.
-
-마지막 건은 `FlagInvitationManager.updateInvitePermission`이 `FlagParticipant`를 반환하도록
-바꾼다. 여섯 곳 모두 도메인 이벤트를 등록하지 않아 동작은 바뀌지 않는다.
-
----
-
-## 확인해둔 사실
-
-- `BatchMutualInteractionEvent` 발행 지점은 작업 후 `FlagConclusionEventListener` 하나다
-- 보존 원천 둘이 모두 종료 이후에만 발생한다(`FlagMemorialFactory`, `Flag.createEncore`).
-  커밋 4에서 이 가드를 테스트로 고정했다
-- `flag_participants`에는 `@SQLRestriction`이 없어 소프트 삭제 후에도 조회된다
-- social은 한 줄도 바뀌지 않는다. 받는 이벤트 타입과 페이로드가 그대로다
-- 스키마 변경 없음. 마이그레이션 파일을 추가하지 않는다
+1. feat(social): 연결 중개인을 상위 3명과 전체 수로 좁힌다
+```

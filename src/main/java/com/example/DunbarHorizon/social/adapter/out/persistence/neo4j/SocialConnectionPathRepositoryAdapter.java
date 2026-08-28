@@ -21,13 +21,16 @@ public class SocialConnectionPathRepositoryAdapter implements SocialConnectionPa
 
     private final Neo4jClient neo4jClient;
 
+    // score는 정렬 기준으로만 쓰고 반환하지 않는다. 남 두 사람의 친밀도를 제3자에게 주지 않기 위함
+    // collect 앞의 ORDER BY가 리스트 순서를 만들고, size()는 자르기 전에 세어 전체 수를 낸다
     private static final String INTERMEDIARIES_QUERY = ("""
             MATCH (me:#{UR} {#{ID}: $myId})-[:#{HF}]->(f1:#{F})<-[r2:#{HF}]-(mid:#{UR})
                   -[r3:#{HF}]->(f2:#{F})<-[r4:#{HF}]-(target:#{UR} {#{ID}: $targetId})
             WHERE r2.#{IR} = true AND r4.#{IR} = true
             WITH mid, sqrt(f1.#{INTIMACY} * f2.#{INTIMACY}) AS score
             ORDER BY score DESC
-            RETURN mid.#{ID} AS userId, mid.#{NICK} AS nickname, score
+            WITH collect({userId: mid.#{ID}, nickname: mid.#{NICK}}) AS ranked
+            RETURN ranked[0..$limit] AS intermediaries, size(ranked) AS totalCount
             """)
             .replace("#{UR}", USER_REFERENCE)
             .replace("#{F}", FRIENDSHIP)
@@ -38,18 +41,21 @@ public class SocialConnectionPathRepositoryAdapter implements SocialConnectionPa
             .replace("#{IR}", PROP_IS_ROUTABLE);
 
     @Override
-    public List<ConnectionPathResult.IntermediaryResult> findIntermediaries(Long myId, Long targetId) {
+    public ConnectionPathResult.Intermediaries findIntermediaries(Long myId, Long targetId, int limit) {
         return neo4jClient.query(INTERMEDIARIES_QUERY)
                 .bind(myId).to("myId")
                 .bind(targetId).to("targetId")
-                .fetchAs(ConnectionPathResult.IntermediaryResult.class)
-                .mappedBy((typeSystem, record) -> new ConnectionPathResult.IntermediaryResult(
-                        record.get("userId").asLong(),
-                        record.get("nickname").asString(),
-                        record.get("score").asDouble(0.0)
+                .bind(limit).to("limit")
+                .fetchAs(ConnectionPathResult.Intermediaries.class)
+                .mappedBy((typeSystem, record) -> new ConnectionPathResult.Intermediaries(
+                        record.get("intermediaries").asList(value ->
+                                new ConnectionPathResult.IntermediaryResult(
+                                        value.get("userId").asLong(),
+                                        value.get("nickname").asString()
+                                )),
+                        record.get("totalCount").asInt()
                 ))
-                .all()
-                .stream()
-                .toList();
+                .one()
+                .orElseGet(() -> new ConnectionPathResult.Intermediaries(List.of(), 0));
     }
 }
