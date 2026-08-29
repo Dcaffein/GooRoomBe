@@ -18,7 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WithMockCustomUser
-class SocialQueryControllerTest extends BaseControllerTest {
+class SocialNetworkControllerTest extends BaseControllerTest {
 
     @Test
     @DisplayName("메인 홈 네트워크를 기본 크기(DUNBAR)로 조회한다")

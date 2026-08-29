@@ -18,7 +18,7 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/network")
-public class SocialQueryController {
+public class SocialNetworkController {
 
     private final SocialExpansionQueryUseCase expansionQueryUseCase;
     private final SocialNetworkQueryUseCase networkQueryUseCase;

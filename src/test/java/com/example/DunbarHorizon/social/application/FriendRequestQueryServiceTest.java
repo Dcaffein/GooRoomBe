@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class FriendRequestQueryServiceTest {
@@ -146,10 +147,18 @@ class FriendRequestQueryServiceTest {
     }
 
     @Test
-    @DisplayName("received 조회에 ACCEPTED를 사용하면 400 예외가 발생한다")
-    void getRequests_ReceivedAccepted_ThrowsException() {
-        assertThatThrownBy(() -> queryService.getRequests(
-                1L, FriendRequestDirection.RECEIVED, FriendRequestStatus.ACCEPTED))
-                .isInstanceOf(FriendRequestInvalidException.class);
+    @DisplayName("received 조회에 ACCEPTED를 사용하면 해당 상태로 조회한다")
+    void getRequests_ReceivedAccepted_해당_상태로_조회한다() {
+        // given
+        given(friendRequestRepository.findAllByReceiver_IdAndStatus(1L, FriendRequestStatus.ACCEPTED))
+                .willReturn(List.of());
+
+        // when
+        List<FriendRequestResult> result = queryService.getRequests(
+                1L, FriendRequestDirection.RECEIVED, FriendRequestStatus.ACCEPTED);
+
+        // then
+        verify(friendRequestRepository).findAllByReceiver_IdAndStatus(1L, FriendRequestStatus.ACCEPTED);
+        assertThat(result).isEmpty();
     }
 }

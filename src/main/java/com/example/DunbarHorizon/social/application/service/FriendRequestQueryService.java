@@ -32,12 +32,6 @@ public class FriendRequestQueryService implements FriendRequestQueryUseCase {
             return findSentRequests(userId);
         }
 
-        if (queryStatus != FriendRequestStatus.PENDING && queryStatus != FriendRequestStatus.HIDDEN) {
-            throw new FriendRequestInvalidException(
-                    "received 조회에는 PENDING 또는 HIDDEN만 사용할 수 있습니다."
-            );
-        }
-
         return friendRequestRepository.findAllByReceiver_IdAndStatus(userId, queryStatus)
                 .stream()
                 .map(FriendRequestResult::from)

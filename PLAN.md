@@ -1,44 +1,44 @@
-# PLAN — task-108 Social Network 노출 정책 캡슐화
+# PLAN — Friend Request 수신 상태 조회 완화
 
 ## 1. 작업 목표
 
-Social Network 엣지 조회에서 직접 친구 연결 수와 2-hop 접점 노출 limit을 결정하는 개인정보 노출 정책을 domain으로 옮긴다. API 계약, 결과 DTO, Neo4j/Cypher와 그래프 pruning 알고리즘은 변경하지 않는다.
+`received` 친구 요청 조회에서 `PENDING`과 `HIDDEN`만 허용하던 예외 검증을 제거한다. `sent`의 status 금지는 유지해, 보낸 사람이 수신자의 숨김 처리를 탐색할 수 없게 한다.
 
 ## 2. 현황 분석
 
-- `SocialNetworkQueryService`가 직접 친구 여부를 분기한 뒤 `5 + intimacy * 5`로 직접 친구 엣지 limit을 계산하고, 2-hop 연결에는 limit `5`를 전달한다.
-- 이 값들은 클라이언트 응답으로 내려가는 연결 수를 결정하는 정책인데 application service의 상수와 구현식으로 흩어져 있다.
-- `PRUNING_EDGE_MIN`, `PRUNING_EDGE_RANGE`는 기본/라벨 네트워크 그래프를 조회하는 알고리즘 튜닝값이므로 그대로 서비스에 둔다.
-- 기존 서비스 단위 테스트는 직접 친구의 limit `7`과 비친구의 limit `5`를 저장소 호출 인자로 검증하고 있다.
+- `FriendRequestQueryService`는 `received` 요청에서 status가 생략되면 `PENDING`을 기본값으로 사용한다.
+- 현재는 `PENDING`, `HIDDEN` 외 상태를 전달하면 `FriendRequestInvalidException`을 던져 400을 반환한다.
+- 수락된 요청은 수락 흐름에서 삭제되므로 `received&status=ACCEPTED`는 제한을 제거하면 빈 목록을 반환한다.
+- `sent`는 status를 받지 않고 저장소에서 `requesterId + PENDING`만 조회한다. status 파라미터 금지는 보낸 사람이 `HIDDEN` 상태를 탐색하지 못하게 하는 개인정보 규칙이므로 유지한다.
 
 ## 3. 변경 파일
 
 | 파일 | 변경 |
 |---|---|
-| `src/main/java/com/example/DunbarHorizon/social/domain/friend/SocialNetworkExposurePolicy.java` | 직접 친구 친밀도에서 노출 엣지 limit을 계산하고, 2-hop 접점 limit을 제공하는 domain policy를 추가한다. |
-| `src/main/java/com/example/DunbarHorizon/social/application/service/SocialNetworkQueryService.java` | 직접 친구 limit 공식과 2-hop limit 상수를 제거하고 policy에 위임한다. pruning 상수와 직접 친구/2-hop 저장소 선택 책임은 유지한다. |
-| `src/test/java/com/example/DunbarHorizon/social/domain/friend/SocialNetworkExposurePolicyTest.java` | 기본·중간·최대 친밀도에 대한 직접 친구 limit과 2-hop limit을 단위 테스트한다. |
-| `src/test/java/com/example/DunbarHorizon/social/application/service/SocialNetworkQueryServiceTest.java` | policy가 계산한 값이 각 직접 친구/2-hop 저장소 호출에 전달되는지 검증하도록 보강한다. |
+| `src/main/java/com/example/DunbarHorizon/social/application/service/FriendRequestQueryService.java` | `received` status whitelist 예외를 제거하고 전달된 enum 상태로 수신 요청을 조회한다. sent 분기와 기본 PENDING 정책은 유지한다. |
+| `src/test/java/com/example/DunbarHorizon/social/application/FriendRequestQueryServiceTest.java` | `received + ACCEPTED`가 예외 없이 receiver/status 조건으로 조회되는지 검증한다. 기존 예외 테스트는 변경한다. |
 
 ## 4. 구현 방향
 
-- 정책은 `directFriendEdgeLimit(double intimacy)`와 `twoHopContactEdgeLimit()`를 제공한다.
-- 현재 동작을 보존한다: 친밀도 `0.0 → 5`, `0.5 → 7`, `1.0 → 10`; 2-hop limit은 `5`다. 정수 변환도 현재와 같이 소수점을 버린다.
-- 정책 객체는 Spring component로 등록해 application service에 생성자 주입한다. Neo4j 타입이나 repository 의존성은 추가하지 않는다.
-- 서비스는 친구 존재 여부를 판단하고 해당 조회 port를 선택하는 orchestration만 담당한다. policy의 숫자 규칙은 서비스에 남기지 않는다.
+- `queryStatus`는 계속 `status == null ? PENDING : status`로 결정한다.
+- `direction == SENT`일 때의 status 거부와 `findSentRequests()`의 `PENDING` 고정 조건은 변경하지 않는다.
+- `RECEIVED`는 `queryStatus`를 그대로 `findAllByReceiver_IdAndStatus`에 전달한다.
+- API의 잘못된 enum 문자열은 기존 Spring binding 오류 처리에 맡긴다.
 
 ## 5. 예상 사이드 이펙트
 
-- 정책 값과 Cypher 파라미터명(`dynamicLimit`, `strangerQuota`)은 그대로여서 API 응답과 저장소 쿼리 결과는 변하지 않는다.
-- `SocialNetworkQueryService` 생성자 의존성이 하나 추가되므로 Mockito 기반 단위 테스트에서 policy를 mock으로 주입한다.
-- 작업 트리에 존재하는 `SocialQueryController` → `SocialNetworkController` 파일명 변경과 untracked task 문서는 본 작업 범위 밖이며 수정하지 않는다.
+- `GET /api/v1/friend-requests?direction=received&status=ACCEPTED`의 결과가 400에서 200 빈 배열(현재 데이터 모델 기준)로 변경된다.
+- 숨김 요청 탐색 방지 정책은 `sent` 분기와 PENDING 고정 저장소 조회로 그대로 보존된다.
+- API URL, request/response DTO, domain 상태 전이 규칙은 변경하지 않는다.
 
 ## 6. 테스트 전략
+
+사용자가 코드 완료를 확인한 뒤 승인하면 다음 테스트를 실행한다.
 
 ```powershell
 $env:JAVA_HOME='C:\\Users\\TFX5470H\\.jdks\\corretto-17.0.15'
 $env:Path="$env:JAVA_HOME\\bin;$env:Path"
-.\\gradlew.bat test --no-daemon --rerun-tasks --tests '*SocialNetworkExposurePolicyTest' --tests '*SocialNetworkQueryServiceTest'
+.\\gradlew.bat test --no-daemon --rerun-tasks --tests '*FriendRequestQueryServiceTest'
 ```
 
-테스트는 정책의 경계 친밀도와 limit, 서비스의 빈 기준 네트워크 조기 반환, 직접 친구/2-hop 분기별 저장소 호출 인자를 검증한다.
+수신 `PENDING` 기본값, `HIDDEN` 조회, `ACCEPTED` 전달 조회, sent status 거부 및 sent PENDING 고정 조회를 검증한다.
