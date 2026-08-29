@@ -110,7 +110,7 @@ public class SocialNetworkRepositoryAdapter implements SocialNetworkRepository {
             + NETWORK_PRUNING_SUFFIX;
 
     private static final String GET_TWO_HOP_CONTACT_EDGES_FOR_TARGET = ("""
-            // 2-hop target과 현재 화면 skeleton 내에서 공통 친구를 친밀도 순으로 최대 5명 반환
+            // 2-hop target의 공통 친구 중 클라이언트 응답에 포함할 연결을 친밀도 순으로 반환
             // baseNetworkFriendIds: 클라이언트가 전달한 기준 네트워크의 친구 ID 목록 (보안 검증 겸용)
             MATCH (me:#{UR} {#{ID}: $meId})
             WITH me
@@ -132,8 +132,8 @@ public class SocialNetworkRepositoryAdapter implements SocialNetworkRepository {
             .replace("#{INTIMACY}", PROP_INTIMACY);
 
     private static final String GET_DIRECT_FRIEND_EDGES_FOR_TARGET = ("""
-            // 동적으로 새 노드를 추가할 때 기존 네트워크와의 연결 엣지를 반환
-            // dynamicLimit: me→target 친밀도 기반으로 서비스 레이어에서 계산 (5 + intimacy * 5)
+            // 클라이언트 응답에 포함할 새 노드와 기존 네트워크의 연결 엣지를 반환
+            // dynamicLimit: me→target 친밀도 기반으로 노출 정책이 결정
             // baseNetworkFriendIds: 기준 네트워크의 친구 ID (내 친구인지 검증 + 공통 친구 필터)
             MATCH (me:#{UR} {#{ID}: $meId})
             WITH me
@@ -198,12 +198,12 @@ public class SocialNetworkRepositoryAdapter implements SocialNetworkRepository {
 
     @Override
     public List<MutualFriendEdgeResult> getTwoHopContactEdgesForTarget(
-            Long userId, Long targetId, List<Long> baseNetworkFriendIds, int strangerQuota) {
+            Long userId, Long targetId, List<Long> baseNetworkFriendIds, int strangerLimit) {
         return neo4jClient.query(GET_TWO_HOP_CONTACT_EDGES_FOR_TARGET)
                 .bind(userId).to("meId")
                 .bind(targetId).to("targetId")
                 .bind(baseNetworkFriendIds).to("baseNetworkFriendIds")
-                .bind(strangerQuota).to("strangerQuota")
+                .bind(strangerLimit).to("strangerQuota")
                 .fetchAs(MutualFriendEdgeResult.class)
                 .mappedBy((typeSystem, record) -> new MutualFriendEdgeResult(
                         record.get("friendAId").asLong(),

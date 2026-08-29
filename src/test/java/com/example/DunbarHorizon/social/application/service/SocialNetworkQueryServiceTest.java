@@ -6,6 +6,7 @@ import com.example.DunbarHorizon.social.application.dto.result.NodeGraphResult;
 import com.example.DunbarHorizon.social.application.port.out.SocialNetworkRepository;
 import com.example.DunbarHorizon.social.domain.friend.DunbarCircle;
 import com.example.DunbarHorizon.social.domain.friend.Friendship;
+import com.example.DunbarHorizon.social.domain.friend.SocialNetworkExposurePolicy;
 import com.example.DunbarHorizon.social.domain.friend.repository.FriendshipRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,9 @@ class SocialNetworkQueryServiceTest {
 
     @Mock
     private Friendship friendship;
+
+    @Mock
+    private SocialNetworkExposurePolicy exposurePolicy;
 
     @InjectMocks
     private SocialNetworkQueryService service;
@@ -74,32 +78,36 @@ class SocialNetworkQueryServiceTest {
     }
 
     @Test
-    @DisplayName("getNetworkEdges: 직접 친구이면 dynamicLimit으로 1-hop 엣지를 조회한다")
+    @DisplayName("getNetworkEdges: 직접 친구이면 정책 limit으로 1-hop 엣지를 조회한다")
     void getNetworkEdges_직접_친구() {
         List<Long> baseNetworkFriendIds = List.of(20L, 30L);
         List<MutualFriendEdgeResult> expected = List.of(new MutualFriendEdgeResult(10L, 20L, 0.6));
         given(friendshipRepository.findById(Friendship.generateCompositeId(1L, 10L)))
                 .willReturn(Optional.of(friendship));
         given(friendship.getIntimacy()).willReturn(0.5);
+        given(exposurePolicy.directFriendEdgeLimit(0.5)).willReturn(7);
         given(socialNetworkRepository.getDirectFriendEdgesForTarget(1L, 10L, baseNetworkFriendIds, 7)).willReturn(expected);
 
         List<MutualFriendEdgeResult> result = service.getNetworkEdges(1L, 10L, baseNetworkFriendIds);
 
+        verify(exposurePolicy).directFriendEdgeLimit(0.5);
         verify(socialNetworkRepository).getDirectFriendEdgesForTarget(1L, 10L, baseNetworkFriendIds, 7);
         assertThat(result).isEqualTo(expected);
     }
 
     @Test
-    @DisplayName("getNetworkEdges: 직접 친구가 아니면 strangerQuota로 2-hop 엣지를 조회한다")
+    @DisplayName("getNetworkEdges: 직접 친구가 아니면 정책 limit으로 2-hop 엣지를 조회한다")
     void getNetworkEdges_직접_친구가_아니면_2홉() {
         List<Long> baseNetworkFriendIds = List.of(20L, 30L);
         List<MutualFriendEdgeResult> expected = List.of(new MutualFriendEdgeResult(10L, 20L, null));
         given(friendshipRepository.findById(Friendship.generateCompositeId(1L, 10L)))
                 .willReturn(Optional.empty());
+        given(exposurePolicy.twoHopContactEdgeLimit()).willReturn(5);
         given(socialNetworkRepository.getTwoHopContactEdgesForTarget(1L, 10L, baseNetworkFriendIds, 5)).willReturn(expected);
 
         List<MutualFriendEdgeResult> result = service.getNetworkEdges(1L, 10L, baseNetworkFriendIds);
 
+        verify(exposurePolicy).twoHopContactEdgeLimit();
         verify(socialNetworkRepository).getTwoHopContactEdgesForTarget(1L, 10L, baseNetworkFriendIds, 5);
         assertThat(result).isEqualTo(expected);
     }

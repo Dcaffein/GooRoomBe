@@ -1,70 +1,44 @@
-# PLAN — task-106 Flag API URL 정돈
+# PLAN — task-108 Social Network 노출 정책 캡슐화
 
-## 1. Flag 조회
+## 1. 작업 목표
 
-### Web·UseCase
+Social Network 엣지 조회에서 직접 친구 연결 수와 2-hop 접점 노출 limit을 결정하는 개인정보 노출 정책을 domain으로 옮긴다. API 계약, 결과 DTO, Neo4j/Cypher와 그래프 pruning 알고리즘은 변경하지 않는다.
 
-- `FlagController`의 `/me`, `/friends`, `/recent`, 루트 `userId+role` 매핑을 제거한다.
-- 루트 `/flags`는 `@CurrentUserId`, 필수 `role`, `page`, `size`를 받아 `getFlagsByRole`을 호출한다.
-- `/flags/feed`는 현재 사용자와 페이지 정보를 받아 `getFeedFlags`를 호출한다.
-- `/flags/profile`은 필수 `userId`만 받아 `getProfileFlags`를 호출한다.
-- `/flags`와 `/flags/feed`는 `page=0`, `size=20`, `createdAt DESC`로 고정한 `PageRequest`를 사용한다.
-- `FlagQueryUseCase` 반환형은 내 목록과 피드만 `Slice<FlagResult>`로 바꾸고, 프로필과 상세는 각각 `List`, 단건을 유지한다.
+## 2. 현황 분석
 
-### Service·Repository
+- `SocialNetworkQueryService`가 직접 친구 여부를 분기한 뒤 `5 + intimacy * 5`로 직접 친구 엣지 limit을 계산하고, 2-hop 연결에는 limit `5`를 전달한다.
+- 이 값들은 클라이언트 응답으로 내려가는 연결 수를 결정하는 정책인데 application service의 상수와 구현식으로 흩어져 있다.
+- `PRUNING_EDGE_MIN`, `PRUNING_EDGE_RANGE`는 기본/라벨 네트워크 그래프를 조회하는 알고리즘 튜닝값이므로 그대로 서비스에 둔다.
+- 기존 서비스 단위 테스트는 직접 친구의 limit `7`과 비친구의 limit `5`를 저장소 호출 인자로 검증하고 있다.
 
-- `getFlagsByRole`은 `HOST`면 hostId, `PARTICIPANT`면 participantId로 Slice 조회한다.
-- `getFeedFlags`는 Social 포트에서 친구 ID를 구한 뒤, 친구가 주최하고 조회 시각 기준 모집 중인 Flag를 Slice로 조회한다. 친구가 없으면 저장소를 호출하지 않고 빈 Slice를 반환한다.
-- Slice의 현재 페이지에 포함된 Flag ID와 호스트 ID만 모아 사용자 정보와 참여자 수를 일괄 조회하고 Slice 메타데이터를 유지해 `FlagResult`를 만든다.
-- `FlagRepository`의 호스트·참여·피드 조회에 `Pageable`을 추가하고 반환형을 `Slice<Flag>`로 변경한다.
-- 참여 목록은 참여 Flag ID 전체를 먼저 읽는 현재 흐름을 제거하고, `FlagParticipant` 조건을 포함한 JPQL로 직접 페이지 조회한다.
-- 프로필 조회는 호스트 또는 참여자인 Flag를 `createdAt DESC`로 조회하고, 서비스 상수로 최대 5건을 제한한다.
-- `findRecentByUserId`는 조회 조건이 드러나는 `findByHostIdOrParticipantId`로 변경하고 결과 보강 로직을 재사용한다.
+## 3. 변경 파일
 
-## 2. Flag Invitation
+| 파일 | 변경 |
+|---|---|
+| `src/main/java/com/example/DunbarHorizon/social/domain/friend/SocialNetworkExposurePolicy.java` | 직접 친구 친밀도에서 노출 엣지 limit을 계산하고, 2-hop 접점 limit을 제공하는 domain policy를 추가한다. |
+| `src/main/java/com/example/DunbarHorizon/social/application/service/SocialNetworkQueryService.java` | 직접 친구 limit 공식과 2-hop limit 상수를 제거하고 policy에 위임한다. pruning 상수와 직접 친구/2-hop 저장소 선택 책임은 유지한다. |
+| `src/test/java/com/example/DunbarHorizon/social/domain/friend/SocialNetworkExposurePolicyTest.java` | 기본·중간·최대 친밀도에 대한 직접 친구 limit과 2-hop limit을 단위 테스트한다. |
+| `src/test/java/com/example/DunbarHorizon/social/application/service/SocialNetworkQueryServiceTest.java` | policy가 계산한 값이 각 직접 친구/2-hop 저장소 호출에 전달되는지 검증하도록 보강한다. |
 
-### 조회
+## 4. 구현 방향
 
-- `FlagInvitationController`의 `/received`, `/sent`를 루트 GET 하나로 합치고 필수 문자열 `direction`을 받는다.
-- `FlagInvitationDirection`은 대소문자와 무관하게 `received`, `sent`를 변환하고 그 외 값은 Flag Invitation 예외로 400을 반환한다.
-- `FlagInvitationQueryUseCase`를 `getInvitations(userId, direction)` 단일 메서드로 변경한다.
-- `FlagInvitationQueryService`는 direction에 따라 invitee 또는 inviter 저장소 조회를 선택하고, 상대 사용자 ID 추출 방식만 다르게 적용한다.
-- `ReceivedFlagInvitationResult`, `SentFlagInvitationResult`는 `counterpartNickname`을 가진 `FlagInvitationResult`로 통합한다. 모집이 끝났거나 사용자 정보를 찾지 못한 초대를 제외하는 현재 정책은 유지한다.
+- 정책은 `directFriendEdgeLimit(double intimacy)`와 `twoHopContactEdgeLimit()`를 제공한다.
+- 현재 동작을 보존한다: 친밀도 `0.0 → 5`, `0.5 → 7`, `1.0 → 10`; 2-hop limit은 `5`다. 정수 변환도 현재와 같이 소수점을 버린다.
+- 정책 객체는 Spring component로 등록해 application service에 생성자 주입한다. Neo4j 타입이나 repository 의존성은 추가하지 않는다.
+- 서비스는 친구 존재 여부를 판단하고 해당 조회 port를 선택하는 orchestration만 담당한다. policy의 숫자 규칙은 서비스에 남기지 않는다.
 
-### 상태 변경·삭제
+## 5. 예상 사이드 이펙트
 
-- `FlagInvitationStatusUpdateRequest`와 상태 값을 추가하고 `PATCH /{invitationId}`를 상태 변경 흐름에 연결한다. `FlagInvitation`이 `ACCEPTED`만 허용하고 피초대자 권한을 검증한다.
-- `FlagInvitationManager`는 상태 변경 후 참여자를 생성하는 교차 도메인 조율을 맡는다.
-- `DELETE /{invitationId}`는 서비스가 초대를 조회해 `FlagInvitation.delete()`에 요청자 판단을 위임한 뒤 삭제한다.
-- `FlagInvitation.delete()`는 invitee의 요청을 `reject`, inviter의 요청을 `cancel`로 분기하고 제3자에게 `FlagInvitationAccessException`을 발생시킨다.
-- 수락 시 참여자 저장 후 초대를 삭제하는 흐름과 초대 생성·알림 흐름은 변경하지 않는다.
+- 정책 값과 Cypher 파라미터명(`dynamicLimit`, `strangerQuota`)은 그대로여서 API 응답과 저장소 쿼리 결과는 변하지 않는다.
+- `SocialNetworkQueryService` 생성자 의존성이 하나 추가되므로 Mockito 기반 단위 테스트에서 policy를 mock으로 주입한다.
+- 작업 트리에 존재하는 `SocialQueryController` → `SocialNetworkController` 파일명 변경과 untracked task 문서는 본 작업 범위 밖이며 수정하지 않는다.
 
-## 3. 테스트
+## 6. 테스트 전략
 
-- `FlagControllerTest`: 새 세 목록 경로, 현재 사용자 전달, 필수 `role/userId`, 기본 페이지 값을 검증한다.
-- `FlagQueryServiceTest`: HOST/PARTICIPANT 분기, 빈 피드의 저장소 미호출, Slice 메타데이터 유지, 프로필 제한 5와 결과 보강을 검증한다.
-- `FlagJpaRepositoryTest`: 호스트·참여·피드 페이지 경계, `createdAt DESC`, 모집 마감 및 soft-delete 제외를 검증한다.
-- `FlagInvitationControllerTest`: direction별 조회, 누락·오류 direction, 통합 응답 필드, PATCH 수락, DELETE를 검증한다.
-- `FlagInvitationQueryServiceTest`: received/sent별 저장소 선택과 상대 사용자 매핑, 모집 종료 Flag 제외를 검증한다.
-- `FlagInvitationServiceTest`: 상태 변경 후 참여자 저장·초대 삭제와 삭제 판단의 도메인 위임을 검증한다.
-- `FlagInvitationManagerTest`: 수락 후 참여자 생성과 초대 권한 규칙을 검증한다.
-- `FlagInvitationTest`: `ACCEPTED` 상태 제약과 invitee 거절, inviter 취소, 제3자 거절을 검증한다.
-
-```bash
-./gradlew test --tests '*FlagControllerTest' \
-  --tests '*FlagQueryServiceTest' \
-  --tests '*FlagJpaRepositoryTest' \
-  --tests '*FlagInvitationControllerTest' \
-  --tests '*FlagInvitationQueryServiceTest' \
-  --tests '*FlagInvitationServiceTest' \
-  --tests '*FlagInvitationManagerTest' \
-  --tests '*FlagInvitationTest'
+```powershell
+$env:JAVA_HOME='C:\\Users\\TFX5470H\\.jdks\\corretto-17.0.15'
+$env:Path="$env:JAVA_HOME\\bin;$env:Path"
+.\\gradlew.bat test --no-daemon --rerun-tasks --tests '*SocialNetworkExposurePolicyTest' --tests '*SocialNetworkQueryServiceTest'
 ```
 
-## 4. 커밋 단위
-
-1. Flag 목록·피드·프로필 조회 URL과 페이지네이션
-2. Flag Invitation 조회·상태 변경 URL 통합
-3. task-106과 PLAN 문서 정리
-
-각 코드 커밋은 관련 테스트를 통과한 뒤 커밋 직전에 검토를 받는다.
+테스트는 정책의 경계 친밀도와 limit, 서비스의 빈 기준 네트워크 조기 반환, 직접 친구/2-hop 분기별 저장소 호출 인자를 검증한다.

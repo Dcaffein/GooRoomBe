@@ -11,5 +11,5 @@ public interface SocialNetworkRepository {
     List<NodeGraphResult> getLabelCustomNetwork(Long userId, String labelId, DunbarCircle circleSize, int pruningMin, int pruningRange);
 
     List<MutualFriendEdgeResult> getDirectFriendEdgesForTarget(Long userId, Long targetId, List<Long> baseNetworkFriendIds, int dynamicLimit);
-    List<MutualFriendEdgeResult> getTwoHopContactEdgesForTarget(Long userId, Long targetId, List<Long> baseNetworkFriendIds, int strangerQuota);
+    List<MutualFriendEdgeResult> getTwoHopContactEdgesForTarget(Long userId, Long targetId, List<Long> baseNetworkFriendIds, int strangerLimit);
 }
